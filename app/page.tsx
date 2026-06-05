@@ -4,7 +4,7 @@ export default function Home() {
   return (
     <main className="flex-1 flex items-center justify-center px-6 py-24">
       <div className="max-w-2xl text-center">
-        <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-slate-900">
+        <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-slate-900 dark:text-white">
           cc-testframework
         </h1>
         <p className="mt-4 text-lg text-slate-600">
