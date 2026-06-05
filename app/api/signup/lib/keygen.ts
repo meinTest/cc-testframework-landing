@@ -4,6 +4,11 @@ export interface KeygenLicense {
   expiry: string | null;
 }
 
+export interface KeygenLicenseFull extends KeygenLicense {
+  metadata: Record<string, unknown>;
+  status: string;
+}
+
 interface CreateLicenseInput {
   email: string;
   name: string;
@@ -12,6 +17,7 @@ interface CreateLicenseInput {
 }
 
 const LOG_PREFIX = "[signup][keygen]";
+const CRON_LOG_PREFIX = "[cron][keygen]";
 
 export async function createTrialLicense(
   input: CreateLicenseInput,
@@ -115,6 +121,121 @@ export async function deleteLicense(
     return;
   }
   console.log(`${LOG_PREFIX} rolled back license ${licenseId}`);
+}
+
+export async function listActiveLicenses(
+  dryRun: boolean,
+): Promise<KeygenLicenseFull[]> {
+  if (dryRun) {
+    console.log(`${CRON_LOG_PREFIX} DRY_RUN — would list active licenses`);
+    return [];
+  }
+
+  const accountId = required("KEYGEN_ACCOUNT_ID");
+  const adminToken = required("KEYGEN_ADMIN_TOKEN");
+
+  const licenses: KeygenLicenseFull[] = [];
+  let page = 1;
+  const pageSize = 100;
+
+  while (true) {
+    const response = await fetch(
+      `https://api.keygen.sh/v1/accounts/${accountId}/licenses?page[number]=${page}&page[size]=${pageSize}&status=ACTIVE`,
+      {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          Accept: "application/vnd.api+json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(
+        `Keygen listLicenses failed: ${response.status} ${response.statusText} — ${text}`,
+      );
+    }
+
+    const body = await response.json();
+    const data: unknown[] = Array.isArray(body?.data) ? body.data : [];
+    for (const entry of data) {
+      if (typeof entry !== "object" || entry === null) continue;
+      const item = entry as {
+        id?: string;
+        attributes?: {
+          key?: string;
+          expiry?: string | null;
+          status?: string;
+          metadata?: Record<string, unknown>;
+        };
+      };
+      if (!item.id || !item.attributes?.key) continue;
+      licenses.push({
+        id: item.id,
+        key: item.attributes.key,
+        expiry: item.attributes.expiry ?? null,
+        metadata: item.attributes.metadata ?? {},
+        status: item.attributes.status ?? "UNKNOWN",
+      });
+    }
+
+    if (data.length < pageSize) break;
+    page += 1;
+    if (page > 50) {
+      console.warn(`${CRON_LOG_PREFIX} aborting pagination at page ${page}`);
+      break;
+    }
+  }
+
+  console.log(`${CRON_LOG_PREFIX} fetched ${licenses.length} active licenses`);
+  return licenses;
+}
+
+export async function markReminderSent(
+  license: KeygenLicenseFull,
+  dryRun: boolean,
+): Promise<void> {
+  if (dryRun) {
+    console.log(
+      `${CRON_LOG_PREFIX} DRY_RUN — would mark reminderSentAt on ${license.id}`,
+    );
+    return;
+  }
+
+  const accountId = required("KEYGEN_ACCOUNT_ID");
+  const adminToken = required("KEYGEN_ADMIN_TOKEN");
+
+  const mergedMetadata = {
+    ...license.metadata,
+    reminderSentAt: new Date().toISOString(),
+  };
+
+  const response = await fetch(
+    `https://api.keygen.sh/v1/accounts/${accountId}/licenses/${license.id}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/vnd.api+json",
+        Accept: "application/vnd.api+json",
+      },
+      body: JSON.stringify({
+        data: {
+          type: "licenses",
+          attributes: { metadata: mergedMetadata },
+        },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Keygen markReminderSent failed: ${response.status} ${response.statusText} — ${text}`,
+    );
+  }
+
+  console.log(`${CRON_LOG_PREFIX} marked reminderSentAt on ${license.id}`);
 }
 
 function required(name: string): string {

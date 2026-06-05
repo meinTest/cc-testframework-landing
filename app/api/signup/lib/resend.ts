@@ -84,6 +84,81 @@ export async function sendWelcomeEmail(
   console.log(`${LOG_PREFIX} welcome sent to ${input.toEmail} (id=${result.data?.id})`);
 }
 
+interface ReminderInput {
+  toEmail: string;
+  customerName: string;
+  licenseKey: string;
+  expiresAt: string;
+  salesEmail: string;
+}
+
+export async function sendReminderEmail(
+  input: ReminderInput,
+  dryRun: boolean,
+): Promise<void> {
+  const from = required("RESEND_FROM");
+
+  if (dryRun) {
+    console.log(
+      `[cron][resend] DRY_RUN — would send reminder to ${input.toEmail}`,
+    );
+    return;
+  }
+
+  const apiKey = required("RESEND_API_KEY");
+  const resend = new Resend(apiKey);
+
+  const expiresOn = new Date(input.expiresAt).toLocaleDateString("en-GB");
+
+  const html = `
+    <h1>Your cc-testframework trial ends soon</h1>
+    <p>Hi ${escape(input.customerName)},</p>
+    <p>your 14-day trial expires on <strong>${expiresOn}</strong>.</p>
+    <p>If you would like to continue using cc-testframework beyond the
+       trial, please reach out to our sales team at
+       <a href="mailto:${input.salesEmail}">${input.salesEmail}</a>.
+       We will arrange a paid license that converts your existing
+       setup without any reinstall.</p>
+    <p>No action is required if you would prefer to let the trial
+       expire — tests will continue to run, but you will see expiry
+       warnings in the output.</p>
+    <hr>
+    <p>Your license key (for reference):</p>
+    <pre>${escape(input.licenseKey)}</pre>
+  `;
+
+  const text = [
+    `Your cc-testframework trial ends soon`,
+    ``,
+    `Hi ${input.customerName},`,
+    ``,
+    `your 14-day trial expires on ${expiresOn}.`,
+    ``,
+    `If you would like to continue using cc-testframework beyond the trial,`,
+    `please reach out to ${input.salesEmail}. We will arrange a paid license`,
+    `that converts your existing setup without any reinstall.`,
+    ``,
+    `No action is required if you would prefer to let the trial expire.`,
+    ``,
+    `Your license key (for reference): ${input.licenseKey}`,
+  ].join("\n");
+
+  const result = await resend.emails.send({
+    from,
+    to: input.toEmail,
+    subject: "Your cc-testframework trial ends in 2 days",
+    html,
+    text,
+  });
+
+  if (result.error) {
+    throw new Error(`Resend reminder send failed: ${result.error.message}`);
+  }
+  console.log(
+    `[cron][resend] reminder sent to ${input.toEmail} (id=${result.data?.id})`,
+  );
+}
+
 export async function notifySupport(
   input: SupportNotifyInput,
   dryRun: boolean,
