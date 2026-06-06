@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { createTrialLicense, deleteLicense } from "./lib/keygen";
+import {
+  createTrialLicense,
+  deleteLicense,
+  findPendingLicenseByToken,
+} from "./lib/keygen";
 import { inviteCollaborator, getInvitationUrl } from "./lib/github";
 import { sendWelcomeEmail, notifySupport } from "./lib/resend";
 
@@ -10,6 +14,7 @@ interface SignupPayload {
   email?: unknown;
   company?: unknown;
   githubUsername?: unknown;
+  token?: unknown;
 }
 
 interface ValidatedInput {
@@ -17,6 +22,7 @@ interface ValidatedInput {
   email: string;
   company: string;
   githubUsername: string;
+  token: string;
 }
 
 export async function POST(request: Request) {
@@ -52,10 +58,64 @@ export async function POST(request: Request) {
   }
   const input = validation.value;
 
+  const vetted = process.env.SALES_VETTED_MODE === "true";
+  let pendingLicenseId: string | null = null;
+  if (vetted) {
+    if (!input.token) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            "Token required. Please request a demo at /demo-request to receive a personalized signup link.",
+        },
+        { status: 401 },
+      );
+    }
+    try {
+      const pending = await findPendingLicenseByToken(input.token, dryRun);
+      if (!pending) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              "Invalid or already used signup token. Please request a fresh demo at /demo-request.",
+          },
+          { status: 401 },
+        );
+      }
+      if (
+        pending.tokenExpiresAt &&
+        Date.parse(pending.tokenExpiresAt) < Date.now()
+      ) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              "Your signup link has expired. Please request a fresh demo at /demo-request.",
+          },
+          { status: 401 },
+        );
+      }
+      pendingLicenseId = pending.id;
+    } catch (err) {
+      console.error(`${LOG_PREFIX} token lookup failed`, err);
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            "Could not validate your signup token. Please try again or contact support@itsbusiness.ch.",
+        },
+        { status: 500 },
+      );
+    }
+  }
+
   console.log(`${LOG_PREFIX} received`, {
     email: input.email,
     githubUsername: input.githubUsername,
     company: input.company,
+    vetted,
+    tokenPrefix: input.token ? `${input.token.slice(0, 8)}…` : null,
     dryRun,
     at: new Date().toISOString(),
   });
@@ -131,8 +191,23 @@ export async function POST(request: Request) {
     console.error(`${LOG_PREFIX} support notify failed (non-fatal)`, err);
   }
 
+  if (pendingLicenseId) {
+    try {
+      await deleteLicense(pendingLicenseId, dryRun);
+      console.log(
+        `${LOG_PREFIX} consumed pending license ${pendingLicenseId}`,
+      );
+    } catch (err) {
+      console.error(
+        `${LOG_PREFIX} pending license consume failed (non-fatal)`,
+        err,
+      );
+    }
+  }
+
   console.log(`${LOG_PREFIX} completed`, {
     licenseId: license.id,
+    vetted,
     dryRun,
   });
 
@@ -151,6 +226,7 @@ function validate(
   const email = stringField(payload.email);
   const company = stringField(payload.company);
   const githubUsername = stringField(payload.githubUsername);
+  const token = stringField(payload.token);
 
   if (!name) return { error: "Missing field: name" };
   if (!email) return { error: "Missing field: email" };
@@ -164,7 +240,7 @@ function validate(
     return { error: "Invalid GitHub username" };
   }
 
-  return { value: { name, email, company, githubUsername } };
+  return { value: { name, email, company, githubUsername, token } };
 }
 
 function stringField(value: unknown): string {

@@ -1,6 +1,13 @@
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 export default function Home() {
+  const vetted = process.env.SALES_VETTED_MODE === "true";
+  const primaryCta = vetted
+    ? { href: "/demo-request", label: "Request a Demo" }
+    : { href: "/signup", label: "Start 14-day Trial" };
+
   return (
     <main className="flex-1 flex items-center justify-center px-6 py-24">
       <div className="max-w-2xl text-center">
@@ -19,10 +26,10 @@ export default function Home() {
 
         <div className="mt-10 flex flex-col sm:flex-row gap-3 justify-center">
           <Link
-            href="/signup"
+            href={primaryCta.href}
             className="inline-flex items-center justify-center rounded-md bg-slate-900 px-6 py-3 text-base font-medium text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
           >
-            Start 14-day Trial
+            {primaryCta.label}
           </Link>
           <a
             href="https://meinTest.github.io/cc-testframework/"

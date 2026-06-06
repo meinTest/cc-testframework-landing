@@ -159,6 +159,131 @@ export async function sendReminderEmail(
   );
 }
 
+interface DemoRequestInput {
+  customerName: string;
+  customerEmail: string;
+  company: string;
+  useCase: string;
+}
+
+export async function notifyDemoRequest(
+  input: DemoRequestInput,
+  dryRun: boolean,
+): Promise<void> {
+  const from = required("RESEND_FROM");
+  const to = required("SALES_NOTIFY_EMAIL");
+
+  if (dryRun) {
+    console.log(
+      `[demo-request][resend] DRY_RUN — would notify ${to} about ${input.customerEmail}`,
+    );
+    return;
+  }
+
+  const apiKey = required("RESEND_API_KEY");
+  const resend = new Resend(apiKey);
+
+  const text = [
+    `New demo request received:`,
+    ``,
+    `Name:     ${input.customerName}`,
+    `Email:    ${input.customerEmail}`,
+    `Company:  ${input.company}`,
+    ``,
+    `Use case:`,
+    input.useCase,
+    ``,
+    `Vet the request, then issue a signup token via`,
+    `POST /api/sales/issue-token-and-email or the /sales admin UI.`,
+  ].join("\n");
+
+  const result = await resend.emails.send({
+    from,
+    to,
+    subject: `[cc-testframework] Demo request: ${input.company}`,
+    text,
+    replyTo: input.customerEmail,
+  });
+
+  if (result.error) {
+    throw new Error(
+      `Resend demo-request notify failed: ${result.error.message}`,
+    );
+  }
+  console.log(
+    `[demo-request][resend] sales notified about ${input.customerEmail} (id=${result.data?.id})`,
+  );
+}
+
+interface OnboardInviteInput {
+  customerName: string;
+  toEmail: string;
+  onboardUrl: string;
+  expiresAt: string;
+}
+
+export async function sendOnboardInvite(
+  input: OnboardInviteInput,
+  dryRun: boolean,
+): Promise<void> {
+  const from = required("RESEND_FROM");
+
+  if (dryRun) {
+    console.log(
+      `[sales][resend] DRY_RUN — would send onboard invite to ${input.toEmail}`,
+    );
+    return;
+  }
+
+  const apiKey = required("RESEND_API_KEY");
+  const resend = new Resend(apiKey);
+
+  const expiresOn = new Date(input.expiresAt).toLocaleDateString("en-GB");
+
+  const html = `
+    <h1>Your cc-testframework trial is ready to activate</h1>
+    <p>Hi ${escape(input.customerName)},</p>
+    <p>thank you for your interest. Please complete your trial signup
+       using the personalized link below:</p>
+    <p><a href="${input.onboardUrl}">${input.onboardUrl}</a></p>
+    <p>This link is valid until <strong>${expiresOn}</strong> and can
+       only be used once.</p>
+    <hr>
+    <p>Questions? Reply to this email or reach us at
+       <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
+  `;
+
+  const text = [
+    `Your cc-testframework trial is ready to activate`,
+    ``,
+    `Hi ${input.customerName},`,
+    ``,
+    `thank you for your interest. Please complete your trial signup`,
+    `using the personalized link below:`,
+    ``,
+    input.onboardUrl,
+    ``,
+    `This link is valid until ${expiresOn} and can only be used once.`,
+    ``,
+    `Questions? support@itsbusiness.ch`,
+  ].join("\n");
+
+  const result = await resend.emails.send({
+    from,
+    to: input.toEmail,
+    subject: "Your cc-testframework trial — complete your signup",
+    html,
+    text,
+  });
+
+  if (result.error) {
+    throw new Error(`Resend onboard invite failed: ${result.error.message}`);
+  }
+  console.log(
+    `[sales][resend] onboard invite sent to ${input.toEmail} (id=${result.data?.id})`,
+  );
+}
+
 export async function notifySupport(
   input: SupportNotifyInput,
   dryRun: boolean,
