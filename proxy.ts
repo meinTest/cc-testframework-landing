@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const config = {
-  matcher: ["/sales/:path*"],
+  matcher: ["/sales"],
 };
 
 const SALES_USER = "sales";

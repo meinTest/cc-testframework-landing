@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { notifyDemoRequest } from "../signup/lib/resend";
+import { signActionToken } from "../sales/lib/action-token";
 
 const LOG_PREFIX = "[demo-request]";
 
@@ -46,6 +47,28 @@ export async function POST(request: Request) {
     at: new Date().toISOString(),
   });
 
+  const origin = originFromRequest(request);
+  let salesActionUrl: string;
+  try {
+    const actionToken = signActionToken({
+      name: input.name,
+      email: input.email,
+      company: input.company,
+      useCase: input.useCase,
+    });
+    salesActionUrl = `${origin}/sales/action?t=${actionToken}`;
+  } catch (err) {
+    console.error(`${LOG_PREFIX} action-token signing failed`, err);
+    return NextResponse.json(
+      {
+        ok: false,
+        message:
+          "Could not submit your request. Please reach out to support@itsbusiness.ch.",
+      },
+      { status: 500 },
+    );
+  }
+
   try {
     await notifyDemoRequest(
       {
@@ -53,6 +76,7 @@ export async function POST(request: Request) {
         customerEmail: input.email,
         company: input.company,
         useCase: input.useCase,
+        salesActionUrl,
       },
       dryRun,
     );
@@ -100,4 +124,11 @@ function validate(
 function stringField(value: unknown): string {
   if (typeof value !== "string") return "";
   return value.trim();
+}
+
+function originFromRequest(request: Request): string {
+  const explicit = process.env.LANDING_BASE_URL;
+  if (explicit) return explicit.replace(/\/$/, "");
+  const url = new URL(request.url);
+  return `${url.protocol}//${url.host}`;
 }

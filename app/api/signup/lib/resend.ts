@@ -164,6 +164,7 @@ interface DemoRequestInput {
   customerEmail: string;
   company: string;
   useCase: string;
+  salesActionUrl: string;
 }
 
 export async function notifyDemoRequest(
@@ -175,7 +176,7 @@ export async function notifyDemoRequest(
 
   if (dryRun) {
     console.log(
-      `[demo-request][resend] DRY_RUN — would notify ${to} about ${input.customerEmail}`,
+      `[demo-request][resend] DRY_RUN — would notify ${to} about ${input.customerEmail} (action=${input.salesActionUrl})`,
     );
     return;
   }
@@ -183,8 +184,25 @@ export async function notifyDemoRequest(
   const apiKey = required("RESEND_API_KEY");
   const resend = new Resend(apiKey);
 
+  const html = `
+    <p>New demo request received. After vetting, send the signup link with one click:</p>
+    <p><a href="${input.salesActionUrl}" style="display:inline-block;background:#0f172a;color:#fff;padding:12px 22px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">Approve and issue signup link</a></p>
+    <p style="color:#64748b;font-size:13px">The button opens a confirm page (no login required, signed link, valid 24 hours). One more click there will issue the trial token and email the personalized signup URL to the customer.</p>
+    <hr>
+    <table style="border-collapse:collapse">
+      <tr><td style="padding:4px 12px 4px 0"><strong>Name</strong></td><td>${escape(input.customerName)}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0"><strong>Email</strong></td><td>${escape(input.customerEmail)}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0"><strong>Company</strong></td><td>${escape(input.company)}</td></tr>
+    </table>
+    <p><strong>Use case</strong></p>
+    <pre style="white-space:pre-wrap;background:#f1f5f9;padding:12px;border-radius:6px;font-family:ui-monospace,Menlo,monospace;font-size:13px">${escape(input.useCase)}</pre>
+  `;
+
   const text = [
-    `New demo request received:`,
+    `New demo request received.`,
+    ``,
+    `Approve and issue the signup link in one click:`,
+    input.salesActionUrl,
     ``,
     `Name:     ${input.customerName}`,
     `Email:    ${input.customerEmail}`,
@@ -192,15 +210,13 @@ export async function notifyDemoRequest(
     ``,
     `Use case:`,
     input.useCase,
-    ``,
-    `Vet the request, then issue a signup token via`,
-    `POST /api/sales/issue-token-and-email or the /sales admin UI.`,
   ].join("\n");
 
   const result = await resend.emails.send({
     from,
     to,
     subject: `[cc-testframework] Demo request: ${input.company}`,
+    html,
     text,
     replyTo: input.customerEmail,
   });
