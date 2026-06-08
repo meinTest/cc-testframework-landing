@@ -152,9 +152,12 @@ export async function POST(request: Request) {
 
   const org = process.env.GH_ORG ?? "meinTest";
   const repo = process.env.GH_REPO ?? "cc-testframework";
-  const quickstartUrl =
-    process.env.QUICKSTART_URL ??
+  const quickstartUrlEn =
+    process.env.QUICKSTART_URL_EN ??
     "https://meintest.github.io/cc-testframework/en/quickstart/";
+  const quickstartUrlDe =
+    process.env.QUICKSTART_URL_DE ??
+    "https://meintest.github.io/cc-testframework/de/quickstart/";
 
   try {
     await sendWelcomeEmail(
@@ -164,7 +167,8 @@ export async function POST(request: Request) {
         licenseKey: license.key,
         licenseExpiry: license.expiry,
         invitationUrl: getInvitationUrl(org, repo),
-        quickstartUrl,
+        quickstartUrlEn,
+        quickstartUrlDe,
       },
       dryRun,
     );

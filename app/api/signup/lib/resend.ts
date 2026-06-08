@@ -8,7 +8,8 @@ interface WelcomeInput {
   licenseKey: string;
   licenseExpiry: string | null;
   invitationUrl: string;
-  quickstartUrl: string;
+  quickstartUrlEn: string;
+  quickstartUrlDe: string;
 }
 
 interface SupportNotifyInput {
@@ -50,7 +51,10 @@ export async function sendWelcomeEmail(
     <p>Set the following environment variable on the machine that runs the tests:</p>
     <pre>CC_LICENSE_KEY=${escape(input.licenseKey)}</pre>
     <h2>3. Read the quickstart</h2>
-    <p><a href="${input.quickstartUrl}">${input.quickstartUrl}</a></p>
+    <p>
+      <a href="${input.quickstartUrlEn}">English</a> &nbsp;|&nbsp;
+      <a href="${input.quickstartUrlDe}">Deutsch</a>
+    </p>
     <hr>
     <p>Questions? Reply to this email or reach us at
        <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
@@ -65,7 +69,9 @@ export async function sendWelcomeEmail(
     ``,
     `1. Accept your GitHub invite: ${input.invitationUrl}`,
     `2. Configure your license: CC_LICENSE_KEY=${input.licenseKey}`,
-    `3. Read the quickstart: ${input.quickstartUrl}`,
+    `3. Read the quickstart:`,
+    `   English: ${input.quickstartUrlEn}`,
+    `   Deutsch: ${input.quickstartUrlDe}`,
     ``,
     `Questions? support@itsbusiness.ch`,
   ].join("\n");
