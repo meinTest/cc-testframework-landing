@@ -18,7 +18,7 @@ export default async function FrameworkPage({
 
   const vetted = process.env.SALES_VETTED_MODE === "true";
   const primaryCta = vetted
-    ? { href: "/demo-request", label: t.common.requestDemo }
+    ? { href: "/demo-request?product=cc-testframework", label: t.common.requestDemo }
     : { href: "/signup", label: t.common.startTrial };
 
   return (

@@ -72,6 +72,7 @@ export async function POST(request: Request) {
     email: verified.payload.email,
     company: verified.payload.company,
     expiresInDays,
+    product: verified.payload.product,
   };
   const origin = originFromRequest(request);
 

@@ -1,3 +1,5 @@
+import type { ProductId } from "../../../products";
+
 export interface KeygenLicense {
   id: string;
   key: string;
@@ -14,6 +16,7 @@ interface CreateLicenseInput {
   name: string;
   company: string;
   githubUsername: string;
+  product: ProductId;
 }
 
 const LOG_PREFIX = "[signup][keygen]";
@@ -25,11 +28,13 @@ export async function createTrialLicense(
 ): Promise<KeygenLicense> {
   const accountId = required("KEYGEN_ACCOUNT_ID");
   const adminToken = required("KEYGEN_ADMIN_TOKEN");
+  // TODO(phase-2): select the trial policy per product once cc-tmgmt has its own
+  // Keygen policy. For now both products share KEYGEN_TRIAL_POLICY_ID.
   const policyId = required("KEYGEN_TRIAL_POLICY_ID");
 
   if (dryRun) {
     console.log(
-      `${LOG_PREFIX} DRY_RUN — would create license with policy=${policyId}, owner=${input.email}`,
+      `${LOG_PREFIX} DRY_RUN — would create ${input.product} license with policy=${policyId}, owner=${input.email}`,
     );
     return {
       id: "dry-run-license-id",
@@ -53,6 +58,7 @@ export async function createTrialLicense(
           attributes: {
             name: `Trial — ${input.company} (${input.email})`,
             metadata: {
+              product: input.product,
               email: input.email,
               customerName: input.name,
               company: input.company,
@@ -96,6 +102,7 @@ export interface PendingLicenseInput {
   name: string;
   company: string;
   expiresInDays: number;
+  product: ProductId;
 }
 
 export interface PendingLicense {
@@ -145,6 +152,7 @@ export async function createPendingLicense(
           attributes: {
             name: `Pending — ${input.company} (${input.email})`,
             metadata: {
+              product: input.product,
               salesToken,
               tokenExpiresAt,
               email: input.email,

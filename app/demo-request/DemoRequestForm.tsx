@@ -1,10 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import type { ProductId } from "../products";
 
 type FormState = "idle" | "submitting" | "ok" | "error";
 
-export default function DemoRequestForm() {
+interface DemoRequestFormProps {
+  product: ProductId;
+  productLabel: string;
+}
+
+export default function DemoRequestForm({
+  product,
+  productLabel,
+}: DemoRequestFormProps) {
   const [state, setState] = useState<FormState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -21,6 +30,7 @@ export default function DemoRequestForm() {
       email: formData.get("email"),
       company: formData.get("company"),
       useCase: formData.get("useCase"),
+      product,
     };
 
     try {
@@ -75,6 +85,13 @@ export default function DemoRequestForm() {
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
           Tell us a bit about your team and we will send you a personalized
           trial link within one business day.
+        </p>
+
+        <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
+          <span className="text-slate-400 dark:text-slate-500">Product:</span>
+          <span className="font-medium text-slate-900 dark:text-white">
+            {productLabel}
+          </span>
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">

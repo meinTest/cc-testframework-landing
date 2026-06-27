@@ -6,6 +6,7 @@ import {
 } from "./lib/keygen";
 import { inviteCollaborator, getInvitationUrl } from "./lib/github";
 import { sendWelcomeEmail, notifySupport } from "./lib/resend";
+import { resolveProduct, DEFAULT_PRODUCT, type ProductId } from "../../products";
 
 const LOG_PREFIX = "[signup]";
 
@@ -60,6 +61,10 @@ export async function POST(request: Request) {
 
   const vetted = process.env.SALES_VETTED_MODE === "true";
   let pendingLicenseId: string | null = null;
+  // Open signups have no product context and default to the framework; vetted
+  // signups inherit the product chosen at demo-request time (carried in the
+  // pending-license metadata).
+  let product: ProductId = DEFAULT_PRODUCT;
   if (vetted) {
     if (!input.token) {
       return NextResponse.json(
@@ -97,6 +102,7 @@ export async function POST(request: Request) {
         );
       }
       pendingLicenseId = pending.id;
+      product = resolveProduct(pending.metadata.product);
     } catch (err) {
       console.error(`${LOG_PREFIX} token lookup failed`, err);
       return NextResponse.json(
@@ -114,15 +120,26 @@ export async function POST(request: Request) {
     email: input.email,
     githubUsername: input.githubUsername,
     company: input.company,
+    product,
     vetted,
     tokenPrefix: input.token ? `${input.token.slice(0, 8)}…` : null,
     dryRun,
     at: new Date().toISOString(),
   });
 
+  // Phase 2 plumbing: the product identity now flows end-to-end, but signup
+  // fulfillment (GitHub repo invite + license-key welcome mail) is still the
+  // framework path. cc-tmgmt needs a release-asset PAT + download mail instead;
+  // that lands in a later step. Surface non-default products loudly until then.
+  if (product !== DEFAULT_PRODUCT) {
+    console.warn(
+      `${LOG_PREFIX} product=${product} reached signup fulfillment, which currently runs the cc-testframework path (GitHub invite + license-key mail). Verify before going live for this product.`,
+    );
+  }
+
   let license;
   try {
-    license = await createTrialLicense(input, dryRun);
+    license = await createTrialLicense({ ...input, product }, dryRun);
   } catch (err) {
     console.error(`${LOG_PREFIX} keygen step failed`, err);
     return NextResponse.json(
@@ -188,6 +205,7 @@ export async function POST(request: Request) {
         githubUsername: input.githubUsername,
         licenseId: license.id,
         licenseKey: license.key,
+        product,
       },
       dryRun,
     );

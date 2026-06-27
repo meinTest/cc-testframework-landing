@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { productLabel, type ProductId } from "../../../products";
 
 const LOG_PREFIX = "[signup][resend]";
 
@@ -19,6 +20,7 @@ interface SupportNotifyInput {
   githubUsername: string;
   licenseId: string;
   licenseKey: string;
+  product: ProductId;
 }
 
 export async function sendWelcomeEmail(
@@ -171,6 +173,7 @@ interface DemoRequestInput {
   company: string;
   useCase: string;
   salesActionUrl: string;
+  product: ProductId;
 }
 
 export async function notifyDemoRequest(
@@ -196,6 +199,7 @@ export async function notifyDemoRequest(
     <p style="color:#64748b;font-size:13px">The button opens a confirm page (no login required, signed link, valid 24 hours). One more click there will issue the trial token and email the personalized signup URL to the customer.</p>
     <hr>
     <table style="border-collapse:collapse">
+      <tr><td style="padding:4px 12px 4px 0"><strong>Product</strong></td><td>${escape(productLabel(input.product))}</td></tr>
       <tr><td style="padding:4px 12px 4px 0"><strong>Name</strong></td><td>${escape(input.customerName)}</td></tr>
       <tr><td style="padding:4px 12px 4px 0"><strong>Email</strong></td><td>${escape(input.customerEmail)}</td></tr>
       <tr><td style="padding:4px 12px 4px 0"><strong>Company</strong></td><td>${escape(input.company)}</td></tr>
@@ -210,6 +214,7 @@ export async function notifyDemoRequest(
     `Approve and issue the signup link in one click:`,
     input.salesActionUrl,
     ``,
+    `Product:  ${productLabel(input.product)}`,
     `Name:     ${input.customerName}`,
     `Email:    ${input.customerEmail}`,
     `Company:  ${input.company}`,
@@ -221,7 +226,7 @@ export async function notifyDemoRequest(
   const result = await resend.emails.send({
     from,
     to,
-    subject: `[cc-testframework] Demo request: ${input.company}`,
+    subject: `[${productLabel(input.product)}] Demo request: ${input.company}`,
     html,
     text,
     replyTo: input.customerEmail,
@@ -324,6 +329,7 @@ export async function notifySupport(
   const text = [
     `New trial activated:`,
     ``,
+    `Product:        ${productLabel(input.product)}`,
     `Name:           ${input.customerName}`,
     `Email:          ${input.customerEmail}`,
     `Company:        ${input.company}`,
@@ -337,7 +343,7 @@ export async function notifySupport(
   const result = await resend.emails.send({
     from,
     to,
-    subject: `[cc-testframework] New trial: ${input.company}`,
+    subject: `[${productLabel(input.product)}] New trial: ${input.company}`,
     text,
   });
 

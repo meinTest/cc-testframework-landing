@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { notifyDemoRequest } from "../signup/lib/resend";
 import { signActionToken } from "../sales/lib/action-token";
+import { resolveProduct, type ProductId } from "../../products";
 
 const LOG_PREFIX = "[demo-request]";
 
@@ -9,6 +10,7 @@ interface DemoRequestPayload {
   email?: unknown;
   company?: unknown;
   useCase?: unknown;
+  product?: unknown;
 }
 
 interface ValidatedDemoRequest {
@@ -16,6 +18,7 @@ interface ValidatedDemoRequest {
   email: string;
   company: string;
   useCase: string;
+  product: ProductId;
 }
 
 export async function POST(request: Request) {
@@ -43,6 +46,7 @@ export async function POST(request: Request) {
   console.log(`${LOG_PREFIX} received`, {
     email: input.email,
     company: input.company,
+    product: input.product,
     dryRun,
     at: new Date().toISOString(),
   });
@@ -55,6 +59,7 @@ export async function POST(request: Request) {
       email: input.email,
       company: input.company,
       useCase: input.useCase,
+      product: input.product,
     });
     salesActionUrl = `${origin}/sales/action?t=${actionToken}`;
   } catch (err) {
@@ -77,6 +82,7 @@ export async function POST(request: Request) {
         company: input.company,
         useCase: input.useCase,
         salesActionUrl,
+        product: input.product,
       },
       dryRun,
     );
@@ -105,6 +111,7 @@ function validate(
   const email = stringField(payload.email);
   const company = stringField(payload.company);
   const useCase = stringField(payload.useCase);
+  const product = resolveProduct(payload.product);
 
   if (!name) return { error: "Missing field: name" };
   if (!email) return { error: "Missing field: email" };
@@ -118,7 +125,7 @@ function validate(
     return { error: "Use case is too long (max 2000 characters)" };
   }
 
-  return { value: { name, email, company, useCase } };
+  return { value: { name, email, company, useCase, product } };
 }
 
 function stringField(value: unknown): string {

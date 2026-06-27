@@ -1,10 +1,12 @@
 import { createPendingLicense } from "../../signup/lib/keygen";
+import { resolveProduct, type ProductId } from "../../../products";
 
 export interface IssueInput {
   name: string;
   email: string;
   company: string;
   expiresInDays: number;
+  product: ProductId;
 }
 
 export interface IssueResult {
@@ -18,6 +20,7 @@ export interface IssuePayload {
   email?: unknown;
   company?: unknown;
   expiresInDays?: unknown;
+  product?: unknown;
 }
 
 const DEFAULT_EXPIRES_IN_DAYS = 7;
@@ -50,7 +53,9 @@ export function validateIssuePayload(
     expiresInDays = Math.floor(parsed);
   }
 
-  return { value: { name, email, company, expiresInDays } };
+  return {
+    value: { name, email, company, expiresInDays, product: resolveProduct(payload.product) },
+  };
 }
 
 export async function issueToken(
@@ -58,7 +63,16 @@ export async function issueToken(
   origin: string,
   dryRun: boolean,
 ): Promise<IssueResult> {
-  const pending = await createPendingLicense(input, dryRun);
+  const pending = await createPendingLicense(
+    {
+      name: input.name,
+      email: input.email,
+      company: input.company,
+      expiresInDays: input.expiresInDays,
+      product: input.product,
+    },
+    dryRun,
+  );
   const onboardUrl = `${origin}/signup?token=${pending.salesToken}`;
   return {
     token: pending.salesToken,

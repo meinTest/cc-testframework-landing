@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ActionPayload } from "../../api/sales/lib/action-token";
+import { productLabel } from "../../products";
 
 type FormState = "idle" | "submitting" | "ok" | "error";
 
@@ -65,6 +66,7 @@ export default function ActionConfirm({ token, payload }: ActionConfirmProps) {
         </p>
 
         <dl className="mt-8 space-y-3 rounded-md border border-slate-300 bg-slate-50 p-6 text-sm dark:border-slate-700 dark:bg-slate-900">
+          <Row label="Product" value={productLabel(payload.product)} />
           <Row label="Name" value={payload.name} />
           <Row label="Email" value={payload.email} />
           <Row label="Company" value={payload.company} />

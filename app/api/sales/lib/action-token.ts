@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { resolveProduct, type ProductId } from "../../../products";
 
 const DEFAULT_VALIDITY_HOURS = 24;
 
@@ -7,6 +8,7 @@ export interface ActionPayload {
   email: string;
   company: string;
   useCase: string;
+  product: ProductId;
   iat: number;
   exp: number;
 }
@@ -16,6 +18,7 @@ export interface ActionPayloadInput {
   email: string;
   company: string;
   useCase: string;
+  product?: ProductId;
   validityHours?: number;
 }
 
@@ -28,6 +31,7 @@ export function signActionToken(input: ActionPayloadInput): string {
     email: input.email,
     company: input.company,
     useCase: input.useCase,
+    product: resolveProduct(input.product),
     iat: now,
     exp: now + validityHours * 60 * 60 * 1000,
   };
@@ -91,6 +95,9 @@ export function verifyActionToken(token: string): VerifyResult {
   if (payload.exp < Date.now()) {
     return { ok: false, reason: "expired" };
   }
+
+  // Legacy tokens predate the product field — default them to the framework.
+  payload.product = resolveProduct(payload.product);
 
   return { ok: true, payload };
 }
