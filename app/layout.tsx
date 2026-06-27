@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "cc-testframework — TypeScript test framework for Web, Desktop, and Mobile",
-  description: "TypeScript-based test framework with built-in conventions. Start a 14-day trial.",
+  title: "CC-Testframework & CC-Testmanagement — Test-Toolchain für Web, Desktop & Mobile",
+  description:
+    "Zwei Werkzeuge für konsistentes Testen: das TypeScript-Test-Framework CC-Testframework und das Git-basierte Test-Management-Tool CC-Testmanagement.",
 };
 
 export default function RootLayout({
