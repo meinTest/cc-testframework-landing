@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import Header from "../Header";
 import { content, resolveLang, withLang } from "../content";
+import { isOffered } from "../products";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,8 @@ export default async function ManagementPage({
 }: {
   searchParams: SearchParams;
 }) {
+  if (!isOffered("cc-tmgmt")) notFound();
+
   const { lang: langParam } = await searchParams;
   const lang = resolveLang(langParam);
   const t = content[lang];

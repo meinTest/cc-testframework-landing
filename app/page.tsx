@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Header from "./Header";
 import { content, resolveLang, withLang } from "./content";
+import { offeredProducts, type ProductId } from "./products";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +16,17 @@ export default async function Home({
   const lang = resolveLang(langParam);
   const t = content[lang];
 
-  const cards = [
-    { ...t.overview.framework, href: withLang("/cc-testframework", lang) },
-    { ...t.overview.mgmt, href: withLang("/cc-testmanagement", lang) },
-  ];
+  const cardFor: Record<ProductId, { name: string; tagline: string; blurb: string; href: string }> = {
+    "cc-testframework": {
+      ...t.overview.framework,
+      href: withLang("/cc-testframework", lang),
+    },
+    "cc-tmgmt": {
+      ...t.overview.mgmt,
+      href: withLang("/cc-testmanagement", lang),
+    },
+  };
+  const cards = offeredProducts().map((id) => cardFor[id]);
 
   return (
     <>

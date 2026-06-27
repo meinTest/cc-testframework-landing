@@ -24,3 +24,28 @@ export function resolveProduct(value: unknown): ProductId {
 export function productLabel(value: unknown): string {
   return PRODUCT_LABELS[resolveProduct(value)];
 }
+
+/**
+ * Which products the site currently offers, controlled by the `PRODUCTS_OFFERED`
+ * env var (comma-separated product ids). Server-side only.
+ *
+ *   PRODUCTS_OFFERED="cc-testframework"            → only CC-Testframework
+ *   PRODUCTS_OFFERED="cc-tmgmt"                    → only CC-Testmanagement
+ *   PRODUCTS_OFFERED="cc-testframework,cc-tmgmt"   → both
+ *   (unset / empty / unrecognized)                → both (default)
+ *
+ * Order follows PRODUCT_IDS, not the env string, so the overview layout is stable.
+ */
+export function offeredProducts(): ProductId[] {
+  const raw = process.env.PRODUCTS_OFFERED?.trim();
+  if (!raw) return [...PRODUCT_IDS];
+  const requested = raw.split(",").map((s) => s.trim());
+  const offered = PRODUCT_IDS.filter((id) => requested.includes(id));
+  // A misconfigured value (nothing valid) falls back to offering everything
+  // rather than taking the whole site down.
+  return offered.length > 0 ? offered : [...PRODUCT_IDS];
+}
+
+export function isOffered(product: ProductId): boolean {
+  return offeredProducts().includes(product);
+}

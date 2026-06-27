@@ -1,5 +1,5 @@
 import DemoRequestForm from "./DemoRequestForm";
-import { resolveProduct, productLabel } from "../products";
+import { resolveProduct, productLabel, offeredProducts } from "../products";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,10 @@ export default async function DemoRequestPage({
   searchParams: SearchParams;
 }) {
   const { product: productParam } = await searchParams;
-  const product = resolveProduct(productParam);
+  const requested = resolveProduct(productParam);
+  // Only let customers request a demo for a product we currently offer.
+  const offered = offeredProducts();
+  const product = offered.includes(requested) ? requested : offered[0];
 
   return <DemoRequestForm product={product} productLabel={productLabel(product)} />;
 }
