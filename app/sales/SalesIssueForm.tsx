@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ProductId } from "../products";
 
 type FormState = "idle" | "submitting" | "ok" | "error";
 
@@ -13,11 +14,18 @@ interface IssueResponse {
   message?: string;
 }
 
-export default function SalesIssueForm() {
+interface SalesIssueFormProps {
+  products: { id: ProductId; label: string }[];
+}
+
+export default function SalesIssueForm({ products }: SalesIssueFormProps) {
   const [state, setState] = useState<FormState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [result, setResult] = useState<IssueResponse | null>(null);
   const [autoEmail, setAutoEmail] = useState(false);
+  const [product, setProduct] = useState<ProductId>(
+    products[0]?.id ?? "cc-testframework",
+  );
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,6 +41,7 @@ export default function SalesIssueForm() {
       email: formData.get("email"),
       company: formData.get("company"),
       expiresInDays: expiresIn ? Number(expiresIn) : undefined,
+      product,
     };
     const endpoint = autoEmail
       ? "/api/sales/issue-token-and-email"
@@ -71,6 +80,26 @@ export default function SalesIssueForm() {
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+          <div>
+            <label
+              htmlFor="product"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-200"
+            >
+              Product
+            </label>
+            <select
+              id="product"
+              value={product}
+              onChange={(e) => setProduct(e.target.value as ProductId)}
+              className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            >
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <Field name="name" label="Customer full name" required />
           <Field name="email" label="Customer email" type="email" required />
           <Field name="company" label="Company" required />
