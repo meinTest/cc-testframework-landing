@@ -15,18 +15,39 @@ export interface ReleaseAsset {
   size: number;
 }
 
+export type TargetOs = "win" | "mac" | "linux";
+
+// Installable artifact per OS, matched by extension so versioned names resolve
+// automatically. .yml/.blockmap sidecar files are ignored.
+const OS_ASSET_PATTERN: Record<TargetOs, RegExp> = {
+  win: /\.exe$/i,
+  mac: /\.dmg$/i,
+  linux: /\.AppImage$/i,
+};
+
+/** Name of the installable asset for an OS in the latest release, or null. */
+export async function resolveOsAssetName(
+  os: TargetOs,
+  dryRun: boolean,
+): Promise<string | null> {
+  const assets = await getLatestAssets(dryRun);
+  const match = assets?.find((a) => OS_ASSET_PATTERN[os].test(a.name));
+  return match ? match.name : null;
+}
+
 /** Latest release assets, keyed by file name. Returns null if there is no release. */
 export async function getLatestAssets(
   dryRun: boolean,
 ): Promise<ReleaseAsset[] | null> {
   if (dryRun) {
-    // Mirror a real electron-builder linux/mac release for smoke tests.
-    // Windows latest.yml is intentionally absent (portable target gap).
+    // Mirror a real electron-builder cross-OS release for smoke tests.
     return [
-      { id: 1, name: "latest-linux.yml", size: 512 },
-      { id: 2, name: "latest-mac.yml", size: 512 },
-      { id: 3, name: "cc-tmgmt-0.5.0-linux-x86_64.AppImage", size: 95_000_000 },
-      { id: 4, name: "cc-tmgmt-0.5.0-mac-arm64.dmg", size: 110_000_000 },
+      { id: 1, name: "latest.yml", size: 512 },
+      { id: 2, name: "latest-linux.yml", size: 512 },
+      { id: 3, name: "latest-mac.yml", size: 512 },
+      { id: 4, name: "cc-tmgmt-0.5.0-win-x64.exe", size: 90_000_000 },
+      { id: 5, name: "cc-tmgmt-0.5.0-linux-x86_64.AppImage", size: 95_000_000 },
+      { id: 6, name: "cc-tmgmt-0.5.0-mac-arm64.dmg", size: 110_000_000 },
     ];
   }
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { checkEntitlement, bearerToken } from "../../lib/entitlement";
+import { checkEntitlement, licenseKeyFromRequest } from "../../lib/entitlement";
 import { getFeedText, getAssetRedirectUrl } from "../../lib/releases";
 
 // cc-tmgmt update/download proxy (Option A — keyGen-Proxy).
@@ -22,7 +22,7 @@ export async function GET(
   const dryRun = process.env.DRY_RUN === "true";
   const { file } = await params;
 
-  const entitlement = await checkEntitlement(bearerToken(request), dryRun);
+  const entitlement = await checkEntitlement(licenseKeyFromRequest(request), dryRun);
   if (!entitlement.ok) {
     return new NextResponse(entitlement.reason, {
       status: entitlement.status,

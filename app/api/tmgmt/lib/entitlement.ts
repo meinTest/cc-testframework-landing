@@ -74,11 +74,20 @@ export async function checkEntitlement(
   return { ok: true, licenseId };
 }
 
-/** Extract the Bearer token from an Authorization header, or "" if absent. */
-export function bearerToken(request: Request): string {
+/**
+ * Read the license key from a request. The Electron updater sends it as
+ * `Authorization: Bearer <key>`; browser download links (from the welcome mail)
+ * can't set headers, so a `?key=` query param is accepted as a fallback.
+ */
+export function licenseKeyFromRequest(request: Request): string {
   const header = request.headers.get("authorization") ?? "";
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  return match ? match[1].trim() : "";
+  if (match) return match[1].trim();
+  try {
+    return (new URL(request.url).searchParams.get("key") ?? "").trim();
+  } catch {
+    return "";
+  }
 }
 
 interface KeygenValidation {

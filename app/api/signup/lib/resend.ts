@@ -311,6 +311,93 @@ export async function sendOnboardInvite(
   );
 }
 
+interface TmgmtWelcomeInput {
+  toEmail: string;
+  customerName: string;
+  licenseKey: string;
+  // Base URL of this deployment, used to build gated download links.
+  origin: string;
+}
+
+export async function sendTmgmtWelcome(
+  input: TmgmtWelcomeInput,
+  dryRun: boolean,
+): Promise<void> {
+  const from = required("RESEND_FROM");
+
+  if (dryRun) {
+    console.log(
+      `${LOG_PREFIX} DRY_RUN — would send cc-tmgmt welcome to ${input.toEmail}`,
+    );
+    return;
+  }
+
+  const apiKey = required("RESEND_API_KEY");
+  const resend = new Resend(apiKey);
+
+  const downloadUrl = (os: "win" | "mac" | "linux") =>
+    `${input.origin}/api/tmgmt/download?os=${os}&key=${encodeURIComponent(input.licenseKey)}`;
+
+  const html = `
+    <h1>Welcome to CC-Testmanagement</h1>
+    <p>Hi ${escape(input.customerName)},</p>
+    <p>your CC-Testmanagement access is ready. The desktop app downloads,
+       updates, and authenticates with the access code below — no GitHub
+       account required.</p>
+    <h2>1. Download the app</h2>
+    <p>
+      <a href="${downloadUrl("win")}">Windows</a> &nbsp;|&nbsp;
+      <a href="${downloadUrl("mac")}">macOS</a> &nbsp;|&nbsp;
+      <a href="${downloadUrl("linux")}">Linux</a>
+    </p>
+    <h2>2. Enter your access code</h2>
+    <p>Start the app and paste this access code when prompted:</p>
+    <pre>${escape(input.licenseKey)}</pre>
+    <p style="color:#64748b;font-size:13px">Keep this code safe — it unlocks the
+       app and its automatic updates. It is tied to your license; if it expires
+       or is revoked, the app will stop updating.</p>
+    <hr>
+    <p>Questions? Reply to this email or reach us at
+       <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
+  `;
+
+  const text = [
+    `Welcome to CC-Testmanagement`,
+    ``,
+    `Hi ${input.customerName},`,
+    ``,
+    `your CC-Testmanagement access is ready. The desktop app downloads,`,
+    `updates, and authenticates with the access code below — no GitHub account`,
+    `required.`,
+    ``,
+    `1. Download the app:`,
+    `   Windows: ${downloadUrl("win")}`,
+    `   macOS:   ${downloadUrl("mac")}`,
+    `   Linux:   ${downloadUrl("linux")}`,
+    `2. Start the app and paste this access code when prompted:`,
+    `   ${input.licenseKey}`,
+    ``,
+    `Keep this code safe — it unlocks the app and its automatic updates.`,
+    ``,
+    `Questions? support@itsbusiness.ch`,
+  ].join("\n");
+
+  const result = await resend.emails.send({
+    from,
+    to: input.toEmail,
+    subject: "Your CC-Testmanagement access is ready",
+    html,
+    text,
+  });
+
+  if (result.error) {
+    throw new Error(`Resend cc-tmgmt welcome send failed: ${result.error.message}`);
+  }
+  console.log(
+    `${LOG_PREFIX} cc-tmgmt welcome sent to ${input.toEmail} (id=${result.data?.id})`,
+  );
+}
+
 export async function notifySupport(
   input: SupportNotifyInput,
   dryRun: boolean,
