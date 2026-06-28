@@ -64,10 +64,18 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     );
   }
 
+  const md = pending.metadata;
+  const name = typeof md.customerName === "string" ? md.customerName : "";
+  const email = typeof md.email === "string" ? md.email : "";
+  const company = typeof md.company === "string" ? md.company : "";
+  // Only prefill when all details are present; otherwise fall back to the form.
+  const prefill = name && email && company ? { name, email, company } : undefined;
+
   return (
     <SignupForm
       token={token}
-      product={resolveProduct(pending.metadata.product)}
+      product={resolveProduct(md.product)}
+      prefill={prefill}
     />
   );
 }

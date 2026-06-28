@@ -5,16 +5,26 @@ import type { ProductId } from "../products";
 
 type FormState = "idle" | "submitting" | "ok" | "error";
 
+interface Prefill {
+  name: string;
+  email: string;
+  company: string;
+}
+
 interface SignupFormProps {
   token: string | null;
   product: ProductId;
+  // Present in the vetted flow: customer details already captured at demo-request
+  // time (carried in the pending-license metadata). Shown read-only instead of
+  // re-collected.
+  prefill?: Prefill;
 }
 
-export default function SignupForm({ token, product }: SignupFormProps) {
-  const needsGithub = product !== "cc-tmgmt";
+export default function SignupForm({ token, product, prefill }: SignupFormProps) {
   const [state, setState] = useState<FormState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const needsGithub = product !== "cc-tmgmt";
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -24,9 +34,9 @@ export default function SignupForm({ token, product }: SignupFormProps) {
 
     const formData = new FormData(event.currentTarget);
     const payload = {
-      name: formData.get("name"),
-      email: formData.get("email"),
-      company: formData.get("company"),
+      name: prefill ? prefill.name : formData.get("name"),
+      email: prefill ? prefill.email : formData.get("email"),
+      company: prefill ? prefill.company : formData.get("company"),
       token: formData.get("token") || undefined,
       ...(needsGithub ? { githubUsername: formData.get("githubUsername") } : {}),
     };
@@ -74,31 +84,41 @@ export default function SignupForm({ token, product }: SignupFormProps) {
     );
   }
 
+  // Vetted flow with nothing left to enter (cc-tmgmt): one-click activation.
+  const oneClick = Boolean(prefill) && !needsGithub;
+
   return (
     <main className="flex-1 flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-md">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-          Start your trial
+          {oneClick ? "Activate your trial" : "Start your trial"}
         </h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
           14 days, full feature set, no payment information required.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-          <Field name="name" label="Full name" required autoComplete="name" />
-          <Field
-            name="email"
-            label="Work email"
-            type="email"
-            required
-            autoComplete="email"
-          />
-          <Field
-            name="company"
-            label="Company"
-            required
-            autoComplete="organization"
-          />
+          {prefill ? (
+            <Summary prefill={prefill} />
+          ) : (
+            <>
+              <Field name="name" label="Full name" required autoComplete="name" />
+              <Field
+                name="email"
+                label="Work email"
+                type="email"
+                required
+                autoComplete="email"
+              />
+              <Field
+                name="company"
+                label="Company"
+                required
+                autoComplete="organization"
+              />
+            </>
+          )}
+
           {needsGithub && (
             <Field
               name="githubUsername"
@@ -114,7 +134,11 @@ export default function SignupForm({ token, product }: SignupFormProps) {
             disabled={state === "submitting"}
             className="w-full rounded-md bg-slate-900 px-4 py-2.5 text-base font-medium text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
           >
-            {state === "submitting" ? "Submitting…" : "Request trial"}
+            {state === "submitting"
+              ? "Submitting…"
+              : prefill
+                ? "Activate trial"
+                : "Request trial"}
           </button>
 
           {state === "error" && errorMessage && (
@@ -129,6 +153,21 @@ export default function SignupForm({ token, product }: SignupFormProps) {
         </p>
       </div>
     </main>
+  );
+}
+
+function Summary({ prefill }: { prefill: Prefill }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-900">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+        Activating trial for
+      </p>
+      <p className="mt-1 font-medium text-slate-900 dark:text-white">
+        {prefill.name}
+      </p>
+      <p className="text-slate-600 dark:text-slate-300">{prefill.email}</p>
+      <p className="text-slate-600 dark:text-slate-300">{prefill.company}</p>
+    </div>
   );
 }
 

@@ -121,7 +121,7 @@ export default function DemoRequestForm({
             disabled={state === "submitting"}
             className="w-full rounded-md bg-slate-900 px-4 py-2.5 text-base font-medium text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
           >
-            {state === "submitting" ? "Submitting…" : "Send request"}
+            {state === "submitting" ? "Submitting…" : "Request trial link"}
           </button>
 
           {state === "error" && errorMessage && (

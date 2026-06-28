@@ -203,10 +203,14 @@ export async function findPendingLicenseByToken(
       tokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       // DRY_RUN_PRODUCT lets smoke tests simulate either product (real lookups
       // read product from the pending license metadata). Absent → framework.
+      // Sample customer details exercise the signup prefill path.
       metadata: {
         salesToken: token,
         dryRun: true,
         product: process.env.DRY_RUN_PRODUCT,
+        customerName: "Dry Run Tester",
+        email: "dry-run@example.com",
+        company: "DryRun Co",
       },
     };
   }
