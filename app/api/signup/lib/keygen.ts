@@ -28,9 +28,7 @@ export async function createTrialLicense(
 ): Promise<KeygenLicense> {
   const accountId = required("KEYGEN_ACCOUNT_ID");
   const adminToken = required("KEYGEN_ADMIN_TOKEN");
-  // TODO(phase-2): select the trial policy per product once cc-tmgmt has its own
-  // Keygen policy. For now both products share KEYGEN_TRIAL_POLICY_ID.
-  const policyId = required("KEYGEN_TRIAL_POLICY_ID");
+  const policyId = trialPolicyId(input.product);
 
   if (dryRun) {
     console.log(
@@ -203,7 +201,13 @@ export async function findPendingLicenseByToken(
     return {
       id: "dry-run-pending-id",
       tokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      metadata: { salesToken: token, dryRun: true },
+      // DRY_RUN_PRODUCT lets smoke tests simulate either product (real lookups
+      // read product from the pending license metadata). Absent → framework.
+      metadata: {
+        salesToken: token,
+        dryRun: true,
+        product: process.env.DRY_RUN_PRODUCT,
+      },
     };
   }
 
@@ -406,6 +410,13 @@ export async function markReminderSent(
   }
 
   console.log(`${CRON_LOG_PREFIX} marked reminderSentAt on ${license.id}`);
+}
+
+// Trial policy per product: cc-tmgmt has its own; the framework keeps the
+// original env var.
+function trialPolicyId(product: ProductId): string {
+  if (product === "cc-tmgmt") return required("KEYGEN_TMGMT_TRIAL_POLICY_ID");
+  return required("KEYGEN_TRIAL_POLICY_ID");
 }
 
 function required(name: string): string {

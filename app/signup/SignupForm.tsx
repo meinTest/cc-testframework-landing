@@ -1,14 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import type { ProductId } from "../products";
 
 type FormState = "idle" | "submitting" | "ok" | "error";
 
 interface SignupFormProps {
   token: string | null;
+  product: ProductId;
 }
 
-export default function SignupForm({ token }: SignupFormProps) {
+export default function SignupForm({ token, product }: SignupFormProps) {
+  const needsGithub = product !== "cc-tmgmt";
   const [state, setState] = useState<FormState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -24,8 +27,8 @@ export default function SignupForm({ token }: SignupFormProps) {
       name: formData.get("name"),
       email: formData.get("email"),
       company: formData.get("company"),
-      githubUsername: formData.get("githubUsername"),
       token: formData.get("token") || undefined,
+      ...(needsGithub ? { githubUsername: formData.get("githubUsername") } : {}),
     };
 
     try {
@@ -96,12 +99,14 @@ export default function SignupForm({ token }: SignupFormProps) {
             required
             autoComplete="organization"
           />
-          <Field
-            name="githubUsername"
-            label="GitHub username"
-            required
-            hint="Used to send your repository invite."
-          />
+          {needsGithub && (
+            <Field
+              name="githubUsername"
+              label="GitHub username"
+              required
+              hint="Used to send your repository invite."
+            />
+          )}
           {token && <input type="hidden" name="token" value={token} />}
 
           <button

@@ -5,7 +5,7 @@ import {
   findPendingLicenseByToken,
 } from "./lib/keygen";
 import { inviteCollaborator, getInvitationUrl } from "./lib/github";
-import { sendWelcomeEmail, notifySupport } from "./lib/resend";
+import { sendWelcomeEmail, sendTmgmtWelcome, notifySupport } from "./lib/resend";
 import { resolveProduct, DEFAULT_PRODUCT, type ProductId } from "../../products";
 
 const LOG_PREFIX = "[signup]";
@@ -127,13 +127,12 @@ export async function POST(request: Request) {
     at: new Date().toISOString(),
   });
 
-  // Phase 2 plumbing: the product identity now flows end-to-end, but signup
-  // fulfillment (GitHub repo invite + license-key welcome mail) is still the
-  // framework path. cc-tmgmt needs a release-asset PAT + download mail instead;
-  // that lands in a later step. Surface non-default products loudly until then.
-  if (product !== DEFAULT_PRODUCT) {
-    console.warn(
-      `${LOG_PREFIX} product=${product} reached signup fulfillment, which currently runs the cc-testframework path (GitHub invite + license-key mail). Verify before going live for this product.`,
+  // The GitHub username is only needed for the framework (it drives the repo
+  // invite). cc-tmgmt has no GitHub step.
+  if (product === DEFAULT_PRODUCT && !input.githubUsername) {
+    return NextResponse.json(
+      { ok: false, message: "Missing field: githubUsername" },
+      { status: 400 },
     );
   }
 
@@ -152,48 +151,69 @@ export async function POST(request: Request) {
     );
   }
 
-  try {
-    await inviteCollaborator(input.githubUsername, dryRun);
-  } catch (err) {
-    console.error(`${LOG_PREFIX} github step failed — rolling back license`, err);
-    await safeRollback(license.id, dryRun);
-    return NextResponse.json(
-      {
-        ok: false,
-        message:
-          "Could not send your GitHub invite. Please verify the username and try again, or contact support@itsbusiness.ch.",
-      },
-      { status: 500 },
-    );
-  }
+  if (product === "cc-tmgmt") {
+    // cc-tmgmt: no GitHub invite. The license key is the access code; the
+    // welcome mail carries it plus the gated per-OS download links.
+    try {
+      await sendTmgmtWelcome(
+        {
+          toEmail: input.email,
+          customerName: input.name,
+          licenseKey: license.key,
+          origin: originFromRequest(request),
+        },
+        dryRun,
+      );
+    } catch (err) {
+      console.error(
+        `${LOG_PREFIX} cc-tmgmt welcome failed — license is valid, customer needs the access code via manual outreach`,
+        err,
+      );
+    }
+  } else {
+    try {
+      await inviteCollaborator(input.githubUsername, dryRun);
+    } catch (err) {
+      console.error(`${LOG_PREFIX} github step failed — rolling back license`, err);
+      await safeRollback(license.id, dryRun);
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            "Could not send your GitHub invite. Please verify the username and try again, or contact support@itsbusiness.ch.",
+        },
+        { status: 500 },
+      );
+    }
 
-  const org = process.env.GH_ORG ?? "meinTest";
-  const repo = process.env.GH_REPO ?? "cc-testframework";
-  const quickstartUrlEn =
-    process.env.QUICKSTART_URL_EN ??
-    "https://meintest.github.io/cc-testframework/en/quickstart/";
-  const quickstartUrlDe =
-    process.env.QUICKSTART_URL_DE ??
-    "https://meintest.github.io/cc-testframework/de/quickstart/";
+    const org = process.env.GH_ORG ?? "meinTest";
+    const repo = process.env.GH_REPO ?? "cc-testframework";
+    const quickstartUrlEn =
+      process.env.QUICKSTART_URL_EN ??
+      "https://meintest.github.io/cc-testframework/en/quickstart/";
+    const quickstartUrlDe =
+      process.env.QUICKSTART_URL_DE ??
+      "https://meintest.github.io/cc-testframework/de/quickstart/";
 
-  try {
-    await sendWelcomeEmail(
-      {
-        toEmail: input.email,
-        customerName: input.name,
-        licenseKey: license.key,
-        licenseExpiry: license.expiry,
-        invitationUrl: getInvitationUrl(org, repo),
-        quickstartUrlEn,
-        quickstartUrlDe,
-      },
-      dryRun,
-    );
-  } catch (err) {
-    console.error(
-      `${LOG_PREFIX} welcome email failed — license + invite are valid, customer needs manual outreach`,
-      err,
-    );
+    try {
+      await sendWelcomeEmail(
+        {
+          toEmail: input.email,
+          customerName: input.name,
+          licenseKey: license.key,
+          licenseExpiry: license.expiry,
+          invitationUrl: getInvitationUrl(org, repo),
+          quickstartUrlEn,
+          quickstartUrlDe,
+        },
+        dryRun,
+      );
+    } catch (err) {
+      console.error(
+        `${LOG_PREFIX} welcome email failed — license + invite are valid, customer needs manual outreach`,
+        err,
+      );
+    }
   }
 
   try {
@@ -237,8 +257,17 @@ export async function POST(request: Request) {
     ok: true,
     message: dryRun
       ? "Dry-run completed. Check Vercel function logs for the simulated calls."
-      : "Trial activated. Check your email for your license key and GitHub invitation.",
+      : product === "cc-tmgmt"
+        ? "Trial activated. Check your email for your download links and access code."
+        : "Trial activated. Check your email for your license key and GitHub invitation.",
   });
+}
+
+function originFromRequest(request: Request): string {
+  const explicit = process.env.LANDING_BASE_URL;
+  if (explicit) return explicit.replace(/\/$/, "");
+  const url = new URL(request.url);
+  return `${url.protocol}//${url.host}`;
 }
 
 function validate(
@@ -253,12 +282,17 @@ function validate(
   if (!name) return { error: "Missing field: name" };
   if (!email) return { error: "Missing field: email" };
   if (!company) return { error: "Missing field: company" };
-  if (!githubUsername) return { error: "Missing field: githubUsername" };
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { error: "Invalid email address" };
   }
-  if (!/^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/i.test(githubUsername)) {
+  // githubUsername drives the framework repo invite. It is required only for the
+  // framework (enforced in POST once the product is known); here we only check
+  // the format when one is supplied.
+  if (
+    githubUsername &&
+    !/^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/i.test(githubUsername)
+  ) {
     return { error: "Invalid GitHub username" };
   }
 

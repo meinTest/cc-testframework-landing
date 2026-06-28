@@ -1,5 +1,6 @@
 import SignupForm from "./SignupForm";
 import { findPendingLicenseByToken } from "../api/signup/lib/keygen";
+import { resolveProduct, DEFAULT_PRODUCT } from "../products";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,8 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   const vetted = process.env.SALES_VETTED_MODE === "true";
 
   if (!vetted) {
-    return <SignupForm token={null} />;
+    // Open signups are framework-only (no product context).
+    return <SignupForm token={null} product={DEFAULT_PRODUCT} />;
   }
 
   const { token } = await searchParams;
@@ -62,7 +64,12 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     );
   }
 
-  return <SignupForm token={token} />;
+  return (
+    <SignupForm
+      token={token}
+      product={resolveProduct(pending.metadata.product)}
+    />
+  );
 }
 
 function isExpired(tokenExpiresAt: string): boolean {

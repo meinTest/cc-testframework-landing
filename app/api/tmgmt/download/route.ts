@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     if (!url) {
       return new NextResponse("Not found", { status: 404, headers: noStore() });
     }
-    return NextResponse.redirect(url, 302);
+    return NextResponse.redirect(url, { status: 302, headers: noStore() });
   } catch (err) {
     console.error(`${LOG_PREFIX} failed resolving ${os} download`, err);
     return new NextResponse("Upstream error", { status: 502, headers: noStore() });
@@ -52,5 +52,7 @@ export async function GET(request: Request) {
 }
 
 function noStore(): Record<string, string> {
-  return { "Cache-Control": "no-store" };
+  // no-referrer keeps the ?key= license code out of the Referer header sent to
+  // the GitHub storage host on the redirect.
+  return { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
 }

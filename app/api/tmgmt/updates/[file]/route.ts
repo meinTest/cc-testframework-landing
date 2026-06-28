@@ -46,7 +46,7 @@ export async function GET(
     if (!url) {
       return new NextResponse("Not found", { status: 404, headers: noStore() });
     }
-    return NextResponse.redirect(url, 302);
+    return NextResponse.redirect(url, { status: 302, headers: noStore() });
   } catch (err) {
     console.error(`${LOG_PREFIX} failed serving ${file}`, err);
     return new NextResponse("Upstream error", { status: 502, headers: noStore() });
@@ -54,5 +54,5 @@ export async function GET(
 }
 
 function noStore(): Record<string, string> {
-  return { "Cache-Control": "no-store" };
+  return { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
 }
