@@ -1,26 +1,35 @@
 @import "tailwindcss";
 
+/* Dark mode via a `.dark` class on <html> (toggle-controlled), not the OS setting. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #2c2c2c; /* meinTest CI dark grey */
+}
+
+.dark {
+  --background: #0f1115;
+  --foreground: #ededed;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* meinTest brand green */
+  --color-brand: #98c12b;
+  --color-brand-strong: #86ab26;
+  --font-sans: var(--font-open-sans);
+  --font-heading: var(--font-scada);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-open-sans), Arial, Helvetica, sans-serif;
+}
+
+h1,
+h2 {
+  font-family: var(--font-scada), var(--font-open-sans), sans-serif;
 }

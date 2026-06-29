@@ -47,7 +47,7 @@ export default async function Home({
               <Link
                 key={card.href}
                 href={card.href}
-                className="group flex flex-col rounded-xl border border-slate-200 p-8 transition hover:border-slate-400 hover:shadow-sm dark:border-slate-800 dark:hover:border-slate-600"
+                className="group flex flex-col rounded-xl border border-slate-200 p-8 transition hover:border-brand hover:shadow-sm dark:border-slate-800 dark:hover:border-brand"
               >
                 <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
                   {card.name}
@@ -58,7 +58,7 @@ export default async function Home({
                 <p className="mt-4 flex-1 text-base text-slate-600 dark:text-slate-300">
                   {card.blurb}
                 </p>
-                <span className="mt-6 inline-flex items-center text-sm font-medium text-slate-900 group-hover:underline dark:text-white">
+                <span className="mt-6 inline-flex items-center text-sm font-semibold text-brand group-hover:underline">
                   {t.common.learnMore} →
                 </span>
               </Link>

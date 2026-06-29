@@ -1,17 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Open_Sans, Scada } from "next/font/google";
 import "./globals.css";
 import { offeredProducts, type ProductId } from "./products";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// meinTest CI fonts: Open Sans (body) + Scada (headings).
+const openSans = Open_Sans({
+  variable: "--font-open-sans",
   subsets: ["latin"],
+  weight: ["300", "400", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const scada = Scada({
+  variable: "--font-scada",
   subsets: ["latin"],
+  weight: ["400", "700"],
 });
+
+// Set the theme class before paint to avoid a flash. Default is light; a stored
+// preference (from the toggle) wins.
+const THEME_INIT = `(function(){try{if(localStorage.getItem('theme')==='dark'){document.documentElement.classList.add('dark');}}catch(e){}})();`;
 
 // Per-product SEO copy. The combined (both-offered) variant is the default.
 const PRODUCT_META: Record<ProductId, { title: string; description: string }> = {
@@ -51,9 +58,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${openSans.variable} ${scada.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+        {children}
+      </body>
     </html>
   );
 }

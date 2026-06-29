@@ -60,7 +60,7 @@ export default async function ManagementPage({
             {/* cc-tmgmt has no self-serve trial yet — sales-led demo only. */}
             <Link
               href="/demo-request?product=cc-tmgmt"
-              className="inline-flex items-center justify-center rounded-md bg-slate-900 px-6 py-3 text-base font-medium text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+              className="inline-flex items-center justify-center rounded-md bg-brand px-6 py-3 text-base font-semibold text-white hover:bg-brand-strong"
             >
               {t.common.requestDemo}
             </Link>
