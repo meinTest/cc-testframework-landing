@@ -14,7 +14,7 @@ export default function SiteHeader() {
           src={logo}
           alt="meinTest GmbH"
           priority
-          className="h-12 w-auto sm:h-16 lg:h-20"
+          className="h-10 w-auto"
         />
       </Link>
       <nav className="flex items-center gap-5">
