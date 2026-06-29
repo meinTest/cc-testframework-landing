@@ -84,7 +84,7 @@ export const content: Record<Lang, Copy> = {
           "Playwright und Appium unter einer Oberfläche. Namensgebung, Struktur und Reporting sind vorkonfiguriert — Testcode bleibt teamübergreifend konsistent.",
       },
       mgmt: {
-        name: "CC-Testmanagement",
+        name: "CC Test Management",
         tagline: "Test-Specs verwalten — ganz ohne Git-Handgriffe",
         blurb:
           "Lokale Windows-App, in der Fachtester TypeScript-Test-Specs bearbeiten. Git-Operationen laufen unsichtbar im Hintergrund. Nutzt CC-Testframework als Ausführungs-Engine.",
@@ -103,10 +103,10 @@ export const content: Record<Lang, Copy> = {
       ],
     },
     mgmt: {
-      name: "CC-Testmanagement",
+      name: "CC Test Management",
       tagline: "Git-basiertes Test-Management als lokale Windows-App.",
       description:
-        "CC-Testmanagement ist ein Git-basiertes Test-Management-Tool als lokale Windows-Anwendung (WebView2). Fachtester bearbeiten TypeScript-Test-Specs in einer Oberfläche auf localhost — commit, push, pull und Pull-Requests laufen automatisch im Hintergrund. Als Ausführungs-Engine dient das CC-Testframework.",
+        "CC Test Management ist ein Git-basiertes Test-Management-Tool als lokale Windows-Anwendung (WebView2). Fachtester bearbeiten TypeScript-Test-Specs in einer Oberfläche auf localhost — commit, push, pull und Pull-Requests laufen automatisch im Hintergrund. Als Ausführungs-Engine dient das CC-Testframework.",
       features: [
         "Kein Git-Wissen nötig: Versionierung passiert unsichtbar im Hintergrund.",
         "Für Fachtester gebaut: TypeScript-Test-Specs bearbeiten statt Tooling bedienen.",
@@ -141,7 +141,7 @@ export const content: Record<Lang, Copy> = {
           "Playwright and Appium under one surface. Naming, structure, and reporting come pre-wired — test code stays consistent across teams.",
       },
       mgmt: {
-        name: "CC-Testmanagement",
+        name: "CC Test Management",
         tagline: "Manage test specs — without touching Git",
         blurb:
           "A local Windows app where functional testers edit TypeScript test specs. Git operations run invisibly in the background. Uses CC-Testframework as its execution engine.",
@@ -160,10 +160,10 @@ export const content: Record<Lang, Copy> = {
       ],
     },
     mgmt: {
-      name: "CC-Testmanagement",
+      name: "CC Test Management",
       tagline: "Git-based test management as a local Windows app.",
       description:
-        "CC-Testmanagement is a Git-based test management tool delivered as a local Windows application (WebView2). Functional testers edit TypeScript test specs in a UI on localhost — commit, push, pull, and pull requests run automatically in the background. It uses CC-Testframework as its execution engine.",
+        "CC Test Management is a Git-based test management tool delivered as a local Windows application (WebView2). Functional testers edit TypeScript test specs in a UI on localhost — commit, push, pull, and pull requests run automatically in the background. It uses CC-Testframework as its execution engine.",
       features: [
         "No Git knowledge required: versioning happens invisibly in the background.",
         "Built for functional testers: edit TypeScript test specs instead of operating tooling.",

@@ -339,9 +339,9 @@ export async function sendTmgmtWelcome(
     `${input.origin}/api/tmgmt/download?os=${os}&key=${encodeURIComponent(input.licenseKey)}`;
 
   const html = `
-    <h1>Welcome to CC-Testmanagement</h1>
+    <h1>Welcome to CC Test Management</h1>
     <p>Hi ${escape(input.customerName)},</p>
-    <p>your CC-Testmanagement access is ready. The desktop app downloads,
+    <p>your CC Test Management access is ready. The desktop app downloads,
        updates, and authenticates with the access code below — no GitHub
        account required.</p>
     <h2>1. Download the app</h2>
@@ -362,11 +362,11 @@ export async function sendTmgmtWelcome(
   `;
 
   const text = [
-    `Welcome to CC-Testmanagement`,
+    `Welcome to CC Test Management`,
     ``,
     `Hi ${input.customerName},`,
     ``,
-    `your CC-Testmanagement access is ready. The desktop app downloads,`,
+    `your CC Test Management access is ready. The desktop app downloads,`,
     `updates, and authenticates with the access code below — no GitHub account`,
     `required.`,
     ``,
@@ -385,7 +385,7 @@ export async function sendTmgmtWelcome(
   const result = await resend.emails.send({
     from,
     to: input.toEmail,
-    subject: "Your CC-Testmanagement access is ready",
+    subject: "Your CC Test Management access is ready",
     html,
     text,
   });

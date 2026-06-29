@@ -13,7 +13,7 @@ export const PRODUCT_IDS: ProductId[] = ["cc-testframework", "cc-tmgmt"];
 /** Customer-facing marketing names. */
 export const PRODUCT_LABELS: Record<ProductId, string> = {
   "cc-testframework": "CC-Testframework",
-  "cc-tmgmt": "CC-Testmanagement",
+  "cc-tmgmt": "CC Test Management",
 };
 
 /** Coerce an unknown/legacy value into a supported ProductId (defaults to framework). */
@@ -30,7 +30,7 @@ export function productLabel(value: unknown): string {
  * env var (comma-separated product ids). Server-side only.
  *
  *   PRODUCTS_OFFERED="cc-testframework"            → only CC-Testframework
- *   PRODUCTS_OFFERED="cc-tmgmt"                    → only CC-Testmanagement
+ *   PRODUCTS_OFFERED="cc-tmgmt"                    → only CC Test Management
  *   PRODUCTS_OFFERED="cc-testframework,cc-tmgmt"   → both
  *   (unset / empty / unrecognized)                → both (default)
  *

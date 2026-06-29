@@ -30,7 +30,7 @@ const PRODUCT_META: Record<ProductId, { title: string; description: string }> = 
   },
   "cc-tmgmt": {
     title:
-      "CC-Testmanagement — Git-basiertes Test-Management als lokale Windows-App",
+      "CC Test Management — Git-basiertes Test-Management als lokale Windows-App",
     description:
       "Git-basiertes Test-Management-Tool: Fachtester bearbeiten TypeScript-Test-Specs, ganz ohne Git-Handgriffe. Nutzt CC-Testframework als Engine.",
   },
@@ -44,9 +44,9 @@ export async function generateMetadata(): Promise<Metadata> {
   }
   return {
     title:
-      "CC-Testframework & CC-Testmanagement — Test-Toolchain für Web, Desktop & Mobile",
+      "CC-Testframework & CC Test Management — Test-Toolchain für Web, Desktop & Mobile",
     description:
-      "Zwei Werkzeuge für konsistentes Testen: das TypeScript-Test-Framework CC-Testframework und das Git-basierte Test-Management-Tool CC-Testmanagement.",
+      "Zwei Werkzeuge für konsistentes Testen: das TypeScript-Test-Framework CC-Testframework und das Git-basierte Test-Management-Tool CC Test Management.",
   };
 }
 
@@ -58,6 +58,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${openSans.variable} ${scada.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
