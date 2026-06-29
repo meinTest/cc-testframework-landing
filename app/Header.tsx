@@ -12,7 +12,7 @@ export default function Header({ lang }: { lang: Lang }) {
   return (
     <header className="flex items-center justify-between px-6 py-5 max-w-5xl mx-auto w-full">
       <Link href={withLang("/", lang)} aria-label="meinTest" className="inline-flex">
-        <Image src={logo} alt="meinTest GmbH" priority className="h-9 w-auto" />
+        <Image src={logo} alt="meinTest GmbH" priority className="h-12 w-auto sm:h-14" />
       </Link>
       <nav className="flex items-center gap-5">
         <Link
