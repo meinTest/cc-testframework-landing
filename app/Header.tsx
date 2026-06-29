@@ -1,27 +1,26 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import LangToggle from "./LangToggle";
 import ThemeToggle from "./ThemeToggle";
 import logo from "./mTs_logo.png";
-import { content, withLang, type Lang } from "./content";
 
-/** Shared site chrome for the marketing pages: brand logo + overview/lang/theme. */
-export default function Header({ lang }: { lang: Lang }) {
-  const t = content[lang];
-
+/** Global site header (rendered on every page from the root layout). */
+export default function SiteHeader() {
   return (
-    <header className="flex items-center justify-between px-6 py-5 max-w-5xl mx-auto w-full">
-      <Link href={withLang("/", lang)} aria-label="meinTest" className="inline-flex">
-        <Image src={logo} alt="meinTest GmbH" priority className="h-12 w-auto sm:h-14" />
+    <header className="flex items-center justify-between gap-4 px-6 py-4 max-w-5xl mx-auto w-full">
+      <Link href="/" aria-label="meinTest — home" className="inline-flex">
+        <Image
+          src={logo}
+          alt="meinTest GmbH"
+          priority
+          className="h-12 w-auto sm:h-16 lg:h-20"
+        />
       </Link>
       <nav className="flex items-center gap-5">
-        <Link
-          href={withLang("/", lang)}
-          className="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-        >
-          {t.nav.overview}
-        </Link>
-        <LangToggle lang={lang} />
+        <Suspense fallback={<span aria-hidden className="w-10" />}>
+          <LangToggle />
+        </Suspense>
         <ThemeToggle />
       </nav>
     </header>

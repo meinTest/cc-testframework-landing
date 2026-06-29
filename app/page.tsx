@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Header from "./Header";
 import { content, resolveLang, withLang } from "./content";
 import { offeredProducts, type ProductId } from "./products";
 
@@ -29,9 +28,7 @@ export default async function Home({
   const cards = offeredProducts().map((id) => cardFor[id]);
 
   return (
-    <>
-      <Header lang={lang} />
-      <main className="flex-1 px-6 py-16 sm:py-24">
+    <main className="flex-1 px-6 py-16 sm:py-24">
         <div className="max-w-5xl mx-auto">
           <div className="max-w-3xl">
             <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-slate-900 dark:text-white">
@@ -65,7 +62,6 @@ export default async function Home({
             ))}
           </div>
         </div>
-      </main>
-    </>
+    </main>
   );
 }

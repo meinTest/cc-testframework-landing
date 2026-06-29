@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { LANGS, type Lang } from "./content";
+import { usePathname, useSearchParams } from "next/navigation";
+import { LANGS, resolveLang } from "./content";
 
 /** DE | EN switch that keeps the current path and swaps the `lang` query param. */
-export default function LangToggle({ lang }: { lang: Lang }) {
+export default function LangToggle() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const lang = resolveLang(searchParams.get("lang") ?? undefined);
 
   return (
     <div className="flex items-center gap-1 text-sm">

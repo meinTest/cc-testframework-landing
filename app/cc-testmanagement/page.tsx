@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import Header from "../Header";
 import { content, resolveLang, withLang } from "../content";
 import { isOffered } from "../products";
 
@@ -21,9 +20,7 @@ export default async function ManagementPage({
   const p = t.mgmt;
 
   return (
-    <>
-      <Header lang={lang} />
-      <main className="flex-1 px-6 py-16 sm:py-24">
+    <main className="flex-1 px-6 py-16 sm:py-24">
         <div className="max-w-3xl mx-auto">
           <Link
             href={withLang("/", lang)}
@@ -79,7 +76,6 @@ export default async function ManagementPage({
             </a>
           </p>
         </div>
-      </main>
-    </>
+    </main>
   );
 }

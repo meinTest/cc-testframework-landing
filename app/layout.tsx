@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Open_Sans, Scada } from "next/font/google";
 import "./globals.css";
+import SiteHeader from "./Header";
 import { offeredProducts, type ProductId } from "./products";
 
 // meinTest CI fonts: Open Sans (body) + Scada (headings).
@@ -63,6 +64,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+        <SiteHeader />
         {children}
       </body>
     </html>
