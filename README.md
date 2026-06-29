@@ -1,7 +1,11 @@
 # cc-testframework-landing
 
-Customer-facing landing page for [cc-testframework](https://github.com/meinTest/cc-testframework).
-Next.js 15 (App Router), Tailwind CSS, hosted on Vercel.
+Customer-facing landing page **and** the sales-vetted onboarding/delivery chain for
+[cc-testframework](https://github.com/meinTest/cc-testframework) and CC-Testmanagement (cc-tmgmt).
+Next.js 16 (App Router), Tailwind CSS, hosted on Vercel.
+
+> **Start here:** [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — run, test, change, deploy
+> (architecture, env vars, DRY_RUN smoke tests, file map, recipes).
 
 ## Pages
 
