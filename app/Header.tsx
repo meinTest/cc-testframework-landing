@@ -8,21 +8,23 @@ import logo from "./mTs_logo.png";
 /** Global site header (rendered on every page from the root layout). */
 export default function SiteHeader() {
   return (
-    <header className="flex items-center justify-between gap-4 px-6 py-4 max-w-5xl mx-auto w-full">
-      <Link href="/" aria-label="meinTest — home" className="inline-flex">
-        <Image
-          src={logo}
-          alt="meinTest GmbH"
-          priority
-          className="h-10 w-auto"
-        />
-      </Link>
-      <nav className="flex items-center gap-5">
-        <Suspense fallback={<span aria-hidden className="w-10" />}>
-          <LangToggle />
-        </Suspense>
-        <ThemeToggle />
-      </nav>
+    <header className="px-6 py-4">
+      <div className="flex items-center justify-between gap-4 max-w-5xl mx-auto w-full">
+        <Link href="/" aria-label="meinTest — home" className="inline-flex">
+          <Image
+            src={logo}
+            alt="meinTest GmbH"
+            priority
+            className="h-10 w-auto"
+          />
+        </Link>
+        <nav className="flex items-center gap-5">
+          <Suspense fallback={<span aria-hidden className="w-10" />}>
+            <LangToggle />
+          </Suspense>
+          <ThemeToggle />
+        </nav>
+      </div>
     </header>
   );
 }
