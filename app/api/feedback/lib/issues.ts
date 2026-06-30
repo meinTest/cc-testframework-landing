@@ -156,13 +156,23 @@ function buildIssueBody(input: CreateIssueInput): string {
 }
 
 function buildLabels(input: CreateIssueInput): string[] {
+  // customer:<licenseId> is the unique, stable isolation index used by GET.
+  // company:<name> is added purely so humans can see the customer in the issue
+  // list (private repo). GET never filters by the company label, so a comma or
+  // a duplicate company name in it is harmless.
   const labels = [`type:${input.type}`, customerLabel(input.licenseId)];
+  if (input.company) labels.push(`company:${companyLabel(input.company)}`);
   if (input.source === "copilot") labels.push("source:copilot");
   return labels;
 }
 
 function customerLabel(licenseId: string): string {
   return `customer:${licenseId}`;
+}
+
+function companyLabel(name: string): string {
+  // GitHub label names cap at 50 chars; "company:" already uses 8.
+  return name.trim().slice(0, 40);
 }
 
 interface IssueLike {
