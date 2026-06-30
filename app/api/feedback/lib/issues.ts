@@ -1,7 +1,10 @@
+import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/rest";
 
-// GitHub-issues backend for the cc-tmgmt in-app feedback proxy. The GitHub token
-// lives only here (server-side); the client never sees it. Customer isolation
+// GitHub-issues backend for the cc-tmgmt in-app feedback proxy. Authenticated as
+// the GitHub App (same credentials as the release proxy) so no static token is
+// needed — installation tokens are minted per call. The client never sees it.
+// Customer isolation
 // uses a per-license `customer:<licenseId>` label as the index — GET filters
 // issues by the validated license's own label, so a client can only ever see
 // its own reports (no separate datastore needed).
@@ -206,7 +209,17 @@ async function releasedReason(
 }
 
 function octokit(): Octokit {
-  return new Octokit({ auth: required("GITHUB_TOKEN") });
+  const appId = required("GH_APP_ID");
+  const installationId = required("GH_APP_INSTALLATION_ID");
+  const privateKey = required("GH_APP_PRIVATE_KEY").replace(/\\n/g, "\n");
+  return new Octokit({
+    authStrategy: createAppAuth,
+    auth: {
+      appId: Number(appId),
+      privateKey,
+      installationId: Number(installationId),
+    },
+  });
 }
 
 function repoCoords(): { owner: string; repo: string } {
