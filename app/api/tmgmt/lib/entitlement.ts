@@ -8,7 +8,7 @@ const LOG_PREFIX = "[tmgmt][entitlement]";
 const PRODUCT: ProductId = "cc-tmgmt";
 
 export type EntitlementResult =
-  | { ok: true; licenseId: string }
+  | { ok: true; licenseId: string; company: string }
   | { ok: false; status: number; reason: string };
 
 /**
@@ -31,7 +31,7 @@ export async function checkEntitlement(
 
   if (dryRun) {
     console.log(`${LOG_PREFIX} DRY_RUN — accepting key ${mask(licenseKey)} as ${PRODUCT}`);
-    return { ok: true, licenseId: "dry-run-license-id" };
+    return { ok: true, licenseId: "dry-run-license-id", company: "DryRun Co" };
   }
 
   const accountId = required("KEYGEN_ACCOUNT_ID");
@@ -70,8 +70,12 @@ export async function checkEntitlement(
   }
 
   const licenseId = body?.data?.id ?? "";
+  const company =
+    typeof body?.data?.attributes?.metadata?.company === "string"
+      ? body.data.attributes.metadata.company
+      : "";
   console.log(`${LOG_PREFIX} entitled license ${licenseId} (key ${mask(licenseKey)})`);
-  return { ok: true, licenseId };
+  return { ok: true, licenseId, company };
 }
 
 /**
