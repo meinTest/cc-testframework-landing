@@ -80,13 +80,42 @@ ausgespielt). Praktisch relevant v. a. bei `rejected`.
 
 ---
 
+## 3) Bearbeiten — `PATCH /api/feedback/{issueNumber}`
+
+Nur erlaubt, **solange Status = `received`** (offen, kein Workflow-Label). Server erzwingt
+Eigentum + Status (Client-Sichtbarkeit ist keine Sicherheit).
+
+**Request-Body:**
+```jsonc
+{ "type": "bug" | "feature", "title": "string", "description": "string", "repro": "string?" }
+```
+**Response (200):**
+```jsonc
+{ "ok": true, "issueNumber": 123, "status": "received", "updatedAt": "ISO" }
+```
+Der automatisch erfasste **Kontext-Abschnitt bleibt erhalten** (Telemetrie wird nicht neu
+gesendet); `company` kommt weiter aus der Lizenz.
+
+## 4) Zurückziehen — `DELETE /api/feedback/{issueNumber}`
+
+Entfernt die Meldung **nur aus der Tool-Liste**. Das **GitHub-Issue bleibt OPEN und
+unverändert** — kein Schließen, kein Löschen; das Team arbeitet es normal weiter. Intern
+wird es als „client-hidden" markiert; **`GET` blendet diese Meldungen aus**. Nur bei
+Status = `received` erlaubt.
+
+**Response (200):** `{ "ok": true }`
+
+---
+
 ## Fehlercodes
 | Code | Bedeutung |
 |---|---|
 | `200` | ok |
 | `400` | Validierungsfehler (z. B. fehlender `title`/`description`, ungültiger `type`) |
 | `401` | kein Lizenzschlüssel mitgeschickt |
-| `403` | Lizenz ungültig/abgelaufen/gesperrt oder nicht für cc-tmgmt berechtigt |
+| `403` | Lizenz ungültig/abgelaufen/gesperrt oder nicht für cc-tmgmt berechtigt — **oder** (PATCH/DELETE) nicht die eigene Meldung |
+| `404` | (PATCH/DELETE) Meldung unbekannt |
+| `409` | (PATCH/DELETE) Status nicht mehr `received` → Bearbeiten/Zurückziehen nicht mehr erlaubt |
 | `502` | Upstream-Fehler (Keygen/GitHub nicht erreichbar) |
 
 Bei `4xx/5xx` ist die Antwort `{ "ok": false, "message": "..." }`.
@@ -100,9 +129,13 @@ Bei `4xx/5xx` ist die Antwort `{ "ok": false, "message": "..." }`.
   wenigen Sekunden auf (GitHub-Label-Index). Deshalb: das gerade erstellte Item
   **optimistisch aus der POST-Response** (`issueNumber` + `status:"received"`) in der Liste
   anzeigen, **nicht** sofort auf `GET` warten — sonst „verschwindet" das Feedback kurz.
-- **Felder sind identisch zu euren Stubs:** `createFeedback()`/`listFeedback()` in
-  `app/main.cjs` einfach von Local-Store auf `fetch` gegen `POST/GET /api/feedback` umstellen;
+- **Felder sind identisch zu euren Stubs:** `createFeedback()`/`listFeedback()`/
+  `updateFeedback()`/`withdrawFeedback()` in `app/main.cjs` von Local-Store auf `fetch` gegen
+  `POST/GET /api/feedback` bzw. `PATCH/DELETE /api/feedback/{issueNumber}` umstellen;
   `issueNumber`, `status`, `statusReason` matchen 1:1.
+- **Bearbeiten/Zurückziehen nur bei `received`:** Aktionen wie gehabt nur dann anzeigen. Der
+  Server gibt sonst **`409`** zurück (Status hat sich inzwischen geändert) — die App kann das
+  als „nicht mehr möglich, bitte Liste aktualisieren" behandeln.
 
 ## Status-Workflow (Server-/Team-Seite, nur zur Info)
 Stati werden aus GitHub-Issue-State + Labels gemappt: offen ohne Label → `received`,
