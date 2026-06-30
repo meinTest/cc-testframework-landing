@@ -65,6 +65,9 @@ export interface FeedbackReport {
   issueNumber: number;
   status: FeedbackStatus;
   statusReason: string | null;
+  // App version a feature/bug was shipped with (from a shipped:<version> label
+  // or the issue's milestone). null when not yet shipped.
+  deliveredVersion: string | null;
   updatedAt: string;
 }
 
@@ -128,15 +131,24 @@ export async function listCustomerIssues(
   if (dryRun) {
     return [
       {
+        issueNumber: 124,
+        status: "done",
+        statusReason: null,
+        deliveredVersion: "0.6.6",
+        updatedAt: new Date().toISOString(),
+      },
+      {
         issueNumber: 123,
         status: "in_progress",
         statusReason: null,
+        deliveredVersion: null,
         updatedAt: new Date().toISOString(),
       },
       {
         issueNumber: 120,
         status: "rejected",
         statusReason: "Außerhalb des Scopes.",
+        deliveredVersion: null,
         updatedAt: new Date().toISOString(),
       },
     ];
@@ -166,6 +178,7 @@ export async function listCustomerIssues(
       issueNumber: issue.number,
       status,
       statusReason,
+      deliveredVersion: extractDeliveredVersion(issue),
       updatedAt: issue.updated_at,
     });
   }
@@ -357,6 +370,20 @@ function labelNames(issue: {
 
 function isReceived(state: string, labels: string[]): boolean {
   return state === "open" && !labels.some((l) => NON_RECEIVED_LABELS.includes(l));
+}
+
+// Delivered app version: a `shipped:<version>` label wins; otherwise the issue's
+// milestone title (the team's chosen index). null when neither is set.
+function extractDeliveredVersion(issue: {
+  labels: (string | { name?: string })[];
+  milestone?: { title?: string } | null;
+}): string | null {
+  const shipped = labelNames(issue).find((l) => l.startsWith("shipped:"));
+  if (shipped) {
+    return shipped.slice("shipped:".length).trim() || null;
+  }
+  const milestone = issue.milestone?.title?.trim();
+  return milestone || null;
 }
 
 function isNotFound(err: unknown): boolean {

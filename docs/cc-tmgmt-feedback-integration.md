@@ -67,9 +67,9 @@ Liefert **ausschließlich** die Meldungen der anfragenden Lizenz (serverseitig �
 **Response (200):**
 ```jsonc
 { "ok": true, "reports": [
-  { "issueNumber": 3, "status": "received",    "statusReason": null,                 "updatedAt": "ISO" },
-  { "issueNumber": 2, "status": "in_progress", "statusReason": null,                 "updatedAt": "ISO" },
-  { "issueNumber": 1, "status": "rejected",    "statusReason": "Außerhalb des Scopes.", "updatedAt": "ISO" }
+  { "issueNumber": 12, "status": "done",        "statusReason": null,                 "deliveredVersion": "0.6.6", "updatedAt": "ISO" },
+  { "issueNumber": 3,  "status": "received",    "statusReason": null,                 "deliveredVersion": null,    "updatedAt": "ISO" },
+  { "issueNumber": 1,  "status": "rejected",    "statusReason": "Außerhalb des Scopes.", "deliveredVersion": null, "updatedAt": "ISO" }
 ] }
 ```
 
@@ -77,6 +77,8 @@ Liefert **ausschließlich** die Meldungen der anfragenden Lizenz (serverseitig �
 **`statusReason`:** i. d. R. `null`; nur gefüllt, wenn ein Maintainer beim Schließen eine
 **bewusst freigegebene** Begründung hinterlegt hat (sonst werden NIE interne Kommentare
 ausgespielt). Praktisch relevant v. a. bei `rejected`.
+**`deliveredVersion`:** App-Version, mit der die Meldung ausgeliefert/gefixt wurde (String
+wie `"0.6.6"`), sonst `null` — siehe Abschnitt 5.
 
 ---
 
@@ -104,6 +106,20 @@ wird es als „client-hidden" markiert; **`GET` blendet diese Meldungen aus**. N
 Status = `received` erlaubt.
 
 **Response (200):** `{ "ok": true }`
+
+---
+
+## 5) `deliveredVersion` im `GET` (App-Feature #9)
+
+Jeder Report kann ein **optionales `deliveredVersion`** tragen — die App-Version, mit der ein
+Feature ausgeliefert / ein Bug gefixt wurde (String wie `"0.6.6"`, sonst `null`).
+
+**Quelle (Team-Seite):** der Proxy liest sie aus
+1. einem Label **`shipped:<version>`** am Issue (z. B. `shipped:0.6.6`) — hat Vorrang, **sonst**
+2. dem **Milestone-Titel** des Issues.
+
+Typischerweise gesetzt, wenn der Status auf `done` geht. Fehlt beides → `deliveredVersion: null`
+(App zeigt `—`). Kein Pflichtfeld; die App führt es im lokalen Store mit.
 
 ---
 
