@@ -13,6 +13,18 @@ const LOG_PREFIX = "[feedback]";
 // A maintainer comment starting with this sentinel is the ONLY comment content
 // ever surfaced to the customer (a deliberately released status reason).
 const CUSTOMER_VISIBLE_SENTINEL = ">>CUSTOMER:";
+// A report the customer removed from their in-tool list. The GitHub issue stays
+// OPEN and otherwise untouched (the team keeps working it); GET just hides it.
+const CLIENT_HIDDEN_LABEL = "client-hidden";
+// Any of these labels means the report has left the "received" state, so the
+// customer may no longer edit or withdraw it. (client-hidden is NOT here — it
+// doesn't change the issue's workflow state.)
+const NON_RECEIVED_LABELS = [
+  "status:reviewing",
+  "status:in-progress",
+  "status:done",
+  "wontfix",
+];
 
 export type FeedbackType = "bug" | "feature";
 export type FeedbackSource = "user" | "copilot";
@@ -56,11 +68,34 @@ export interface FeedbackReport {
   updatedAt: string;
 }
 
+export interface UpdateIssueInput {
+  type: FeedbackType;
+  title: string;
+  description: string;
+  repro?: string;
+  // Server-derived from the license.
+  company: string;
+}
+
+// A report that has passed the ownership + "received" guard and may be edited.
+export interface EditableIssue {
+  number: number;
+  state: string;
+  body: string;
+  labels: string[];
+  updatedAt: string;
+}
+
+export type EditGuard =
+  | { ok: true; issue: EditableIssue }
+  | { ok: false; status: number; reason: string };
+
 export async function createIssue(
   input: CreateIssueInput,
   dryRun: boolean,
 ): Promise<CreatedIssue> {
-  const body = buildIssueBody(input);
+  const contextBlock = buildContextBlock(input.context, input.company);
+  const body = buildBody(input.description, input.repro, contextBlock);
   const labels = buildLabels(input);
 
   if (dryRun) {
@@ -120,6 +155,7 @@ export async function listCustomerIssues(
   const reports: FeedbackReport[] = [];
   for (const issue of res.data) {
     if (issue.pull_request) continue; // listForRepo also returns PRs
+    if (labelNames(issue).includes(CLIENT_HIDDEN_LABEL)) continue; // removed from tool list
     const status = mapStatus(issue);
     // A released reason is only relevant once an issue is closed.
     const statusReason =
@@ -136,23 +172,153 @@ export async function listCustomerIssues(
   return reports;
 }
 
-function buildIssueBody(input: CreateIssueInput): string {
-  const ctx = input.context ?? {};
-  const lines: string[] = ["## Beschreibung", "", input.description, ""];
-  if (input.repro) {
-    lines.push("## Reproduktionsschritte", "", input.repro, "");
-  }
-  lines.push(
-    "## Automatisch erfasster Kontext",
+const CONTEXT_HEADING = "## Automatisch erfasster Kontext";
+
+function buildContextBlock(ctx: FeedbackContext, company: string): string {
+  const c = ctx ?? {};
+  return [
+    CONTEXT_HEADING,
     "",
-    `- App-Version: ${ctx.version ?? "—"}`,
-    `- Platform: ${ctx.platform ?? "—"}`,
-    `- OS: ${ctx.osVersion ?? "—"}`,
-    `- Ansicht: ${ctx.view ?? "—"}`,
-    `- Letzter Fehler: ${ctx.lastError ?? "—"}`,
-    `- Kunde: ${input.company || "—"}`,
-  );
+    `- App-Version: ${c.version ?? "—"}`,
+    `- Platform: ${c.platform ?? "—"}`,
+    `- OS: ${c.osVersion ?? "—"}`,
+    `- Ansicht: ${c.view ?? "—"}`,
+    `- Letzter Fehler: ${c.lastError ?? "—"}`,
+    `- Kunde: ${company || "—"}`,
+  ].join("\n");
+}
+
+function buildBody(
+  description: string,
+  repro: string | undefined,
+  contextBlock: string,
+): string {
+  const lines: string[] = ["## Beschreibung", "", description, ""];
+  if (repro) lines.push("## Reproduktionsschritte", "", repro, "");
+  lines.push(contextBlock);
   return lines.join("\n");
+}
+
+// On edit the client never resends telemetry, so preserve the original context
+// section from the existing issue body.
+function extractContextBlock(body: string): string | null {
+  const i = body.indexOf(CONTEXT_HEADING);
+  return i >= 0 ? body.slice(i).trimEnd() : null;
+}
+
+/**
+ * Fetch an issue and enforce that it belongs to this license and is still in the
+ * `received` state — the only state in which a customer may edit or withdraw it.
+ * Client-side visibility is not security: the server enforces ownership + state.
+ */
+export async function loadEditableIssue(
+  licenseId: string,
+  issueNumber: number,
+  dryRun: boolean,
+): Promise<EditGuard> {
+  if (dryRun) {
+    return {
+      ok: true,
+      issue: {
+        number: issueNumber,
+        state: "open",
+        body: `## Beschreibung\n\nDry run\n\n${CONTEXT_HEADING}\n\n- App-Version: 0.6.2\n- Kunde: DryRun Co`,
+        labels: [customerLabel(licenseId), "type:bug"],
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  const { owner, repo } = repoCoords();
+  let data;
+  try {
+    const res = await octokit().rest.issues.get({
+      owner,
+      repo,
+      issue_number: issueNumber,
+    });
+    data = res.data;
+  } catch (err) {
+    if (isNotFound(err)) return { ok: false, status: 404, reason: "Report not found" };
+    throw err;
+  }
+
+  if (data.pull_request) return { ok: false, status: 404, reason: "Report not found" };
+
+  const labels = labelNames(data);
+  if (!labels.includes(customerLabel(licenseId))) {
+    return { ok: false, status: 403, reason: "Not your report" };
+  }
+  if (!isReceived(data.state, labels)) {
+    return {
+      ok: false,
+      status: 409,
+      reason: "Report can no longer be edited or withdrawn",
+    };
+  }
+
+  return {
+    ok: true,
+    issue: {
+      number: data.number,
+      state: data.state,
+      body: data.body ?? "",
+      labels,
+      updatedAt: data.updated_at,
+    },
+  };
+}
+
+export async function updateIssue(
+  issue: EditableIssue,
+  input: UpdateIssueInput,
+  dryRun: boolean,
+): Promise<{ updatedAt: string }> {
+  const contextBlock =
+    extractContextBlock(issue.body) ?? buildContextBlock({}, input.company);
+  const body = buildBody(input.description, input.repro, contextBlock);
+  // Swap the type:* label, keep customer/company/source and anything else.
+  const labels = issue.labels
+    .filter((l) => !l.startsWith("type:"))
+    .concat(`type:${input.type}`);
+
+  if (dryRun) {
+    console.log(`${LOG_PREFIX} DRY_RUN — would update issue #${issue.number}`);
+    return { updatedAt: new Date().toISOString() };
+  }
+
+  const { owner, repo } = repoCoords();
+  const res = await octokit().rest.issues.update({
+    owner,
+    repo,
+    issue_number: issue.number,
+    title: input.title,
+    body,
+    labels,
+  });
+  return { updatedAt: res.data.updated_at };
+}
+
+export async function withdrawIssue(
+  issue: EditableIssue,
+  dryRun: boolean,
+): Promise<void> {
+  if (dryRun) {
+    console.log(
+      `${LOG_PREFIX} DRY_RUN — would hide issue #${issue.number} from the tool list`,
+    );
+    return;
+  }
+  // Remove it from the customer's in-tool list ONLY: add an internal marker
+  // label and leave the GitHub issue OPEN and otherwise untouched, so the team
+  // keeps working it normally. No close, no delete. GET filters these out.
+  const { owner, repo } = repoCoords();
+  await octokit().rest.issues.addLabels({
+    owner,
+    repo,
+    issue_number: issue.number,
+    labels: [CLIENT_HIDDEN_LABEL],
+  });
 }
 
 function buildLabels(input: CreateIssueInput): string[] {
@@ -181,10 +347,29 @@ interface IssueLike {
   labels: (string | { name?: string })[];
 }
 
-function mapStatus(issue: IssueLike): FeedbackStatus {
-  const labels = issue.labels
+function labelNames(issue: {
+  labels: (string | { name?: string })[];
+}): string[] {
+  return issue.labels
     .map((l) => (typeof l === "string" ? l : l.name))
     .filter((n): n is string => Boolean(n));
+}
+
+function isReceived(state: string, labels: string[]): boolean {
+  return state === "open" && !labels.some((l) => NON_RECEIVED_LABELS.includes(l));
+}
+
+function isNotFound(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "status" in err &&
+    (err as { status?: number }).status === 404
+  );
+}
+
+function mapStatus(issue: IssueLike): FeedbackStatus {
+  const labels = labelNames(issue);
 
   if (issue.state === "open") {
     if (labels.includes("status:in-progress")) return "in_progress";
