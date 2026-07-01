@@ -49,6 +49,27 @@ Lizenz-gated, löst das aktuelle Installable für das OS zum Klick-Zeitpunkt auf
 auf die GitHub-Asset-URL. (Hier der Key als `?key=`, weil Browser-/Mail-Links keinen Header setzen
 können.)
 
+### Lizenz-Status (First-Run-Onboarding + Settings → Lizenz)
+```
+GET https://cc-testframework-landing.vercel.app/api/tmgmt/license
+Authorization: Bearer <keygen-lizenzschlüssel>
+```
+Der Update-Feed validiert zwar (200/401/403), liefert aber **kein Ablaufdatum** — dafür dieser
+dedizierte Endpunkt. Gibt **ausschließlich** die Daten der per Bearer authentifizierten Lizenz
+zurück (eigene Stammdaten), keine fremden Lizenzen, keine Secrets.
+
+**200 — gültig:**
+```jsonc
+{ "ok": true, "expiresAt": "2028-07-14T00:00:00.000Z", "licensee": "Max Muster", "company": "itsbusiness AG" }
+```
+- `expiresAt`: ISO-8601 Laufzeitende aus Keygen; **`null`** bei unbefristeter Lizenz.
+- `licensee` / `company`: aus der Lizenz-Metadata; fehlend → `null` (App zeigt `—`).
+
+**401** — kein/ungültiger Schlüssel (nicht auflösbar) · **403** — abgelaufen/gesperrt/falsches
+Produkt. Fehler-Body: `{ "ok": false, "reason": "invalid" | "expired", "message": "…" }` — die App
+wertet `reason` bevorzugt aus, sonst den Status-Code. Bei `404`/Netzfehler fällt die App auf die
+reine Feed-Validierung (`…/updates/latest.yml`) zurück (dann ohne Ablaufdatum).
+
 ---
 
 ## Antwort-/Fehlercodes
