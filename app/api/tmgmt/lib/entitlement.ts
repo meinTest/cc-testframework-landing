@@ -11,6 +11,17 @@ export type EntitlementResult =
   | { ok: true; licenseId: string; company: string }
   | { ok: false; status: number; reason: string };
 
+// Fuller license view for the license-status endpoint (needs expiry + licensee).
+export type LicenseDescription =
+  | {
+      ok: true;
+      licenseId: string;
+      company: string;
+      customerName: string;
+      expiresAt: string | null;
+    }
+  | { ok: false; status: number; reason?: "invalid" | "expired"; message: string };
+
 /**
  * Validate a Keygen license key for cc-tmgmt access.
  *
@@ -79,6 +90,92 @@ export async function checkEntitlement(
 }
 
 /**
+ * Validate a license and return status details for the license-status endpoint:
+ * expiry + licensee/company (the customer's own data), classified into
+ * invalid (401) / expired (403). Only the authenticated license's own data is
+ * ever returned — no other license, no secrets.
+ */
+export async function describeLicense(
+  licenseKey: string,
+  dryRun: boolean,
+): Promise<LicenseDescription> {
+  if (!licenseKey) {
+    return { ok: false, status: 401, reason: "invalid", message: "Missing license key" };
+  }
+
+  if (dryRun) {
+    return {
+      ok: true,
+      licenseId: "dry-run-license-id",
+      company: "DryRun Co",
+      customerName: "Dry Run Tester",
+      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+  }
+
+  const accountId = required("KEYGEN_ACCOUNT_ID");
+
+  let body: KeygenValidation;
+  try {
+    const response = await fetch(
+      `https://api.keygen.sh/v1/accounts/${accountId}/licenses/actions/validate-key`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/vnd.api+json",
+          Accept: "application/vnd.api+json",
+        },
+        body: JSON.stringify({ meta: { key: licenseKey } }),
+      },
+    );
+    if (!response.ok && response.status !== 200) {
+      console.error(`${LOG_PREFIX} Keygen validate-key HTTP ${response.status}`);
+      return { ok: false, status: 502, message: "License validation unavailable" };
+    }
+    body = (await response.json()) as KeygenValidation;
+  } catch (err) {
+    console.error(`${LOG_PREFIX} Keygen validate-key request failed`, err);
+    return { ok: false, status: 502, message: "License validation unavailable" };
+  }
+
+  const valid = body?.meta?.valid === true;
+  const code = body?.meta?.code;
+  const metadata = body?.data?.attributes?.metadata ?? {};
+  const product = metadata.product;
+
+  if (valid && product === PRODUCT) {
+    return {
+      ok: true,
+      licenseId: body?.data?.id ?? "",
+      company: typeof metadata.company === "string" ? metadata.company : "",
+      customerName:
+        typeof metadata.customerName === "string" ? metadata.customerName : "",
+      expiresAt:
+        typeof body?.data?.attributes?.expiry === "string"
+          ? body.data.attributes.expiry
+          : null,
+    };
+  }
+
+  if (code === "EXPIRED") {
+    return { ok: false, status: 403, reason: "expired", message: "License expired" };
+  }
+  if (code === "SUSPENDED" || code === "BANNED") {
+    return { ok: false, status: 403, reason: "invalid", message: "License suspended" };
+  }
+  if (valid && product !== PRODUCT) {
+    return {
+      ok: false,
+      status: 403,
+      reason: "invalid",
+      message: "License is not valid for cc-tmgmt",
+    };
+  }
+  // NOT_FOUND / missing / any other → treat as an unresolvable/invalid key.
+  return { ok: false, status: 401, reason: "invalid", message: "Invalid license key" };
+}
+
+/**
  * Read the license key from a request. The Electron updater sends it as
  * `Authorization: Bearer <key>`; browser download links (from the welcome mail)
  * can't set headers, so a `?key=` query param is accepted as a fallback.
@@ -100,6 +197,7 @@ interface KeygenValidation {
     id?: string;
     attributes?: {
       status?: string;
+      expiry?: string | null;
       metadata?: Record<string, unknown>;
     };
   };
