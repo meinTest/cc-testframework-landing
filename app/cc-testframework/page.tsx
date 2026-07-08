@@ -73,6 +73,15 @@ export default async function FrameworkPage({
             </a>
           </div>
 
+          <p className="mt-6">
+            <Link
+              href={withLang("/cc-testframework/pricing", lang)}
+              className="text-sm font-semibold text-brand hover:underline"
+            >
+              {t.common.seePricing} →
+            </Link>
+          </p>
+
           <p className="mt-12 text-sm text-slate-400 dark:text-slate-500">
             {t.common.alreadyCustomer}{" "}
             <a

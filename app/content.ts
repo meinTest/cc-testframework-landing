@@ -32,6 +32,38 @@ type ProductDetail = {
   features: string[];
 };
 
+export interface PricingCopy {
+  title: string;
+  subtitle: string;
+  cycleMonthly: string;
+  cycleYearly: string;
+  yearlyNote: string;
+  perUserMonth: string;
+  perUserYear: string;
+  currencyLabel: string;
+  recommended: string;
+  trial: {
+    name: string;
+    price: string;
+    tagline: string;
+    features: string[];
+    cta: string;
+  };
+  subscription: {
+    name: string;
+    tagline: string;
+    features: string[];
+    cta: string;
+  };
+  onetime: {
+    name: string;
+    price: string;
+    tagline: string;
+    features: string[];
+    cta: string;
+  };
+}
+
 type Copy = {
   htmlLang: string;
   nav: {
@@ -46,6 +78,7 @@ type Copy = {
     docsComingSoon: string;
     alreadyCustomer: string;
     contactSales: string;
+    seePricing: string;
   };
   overview: {
     title: string;
@@ -55,6 +88,7 @@ type Copy = {
   };
   framework: ProductDetail;
   mgmt: ProductDetail;
+  pricing: PricingCopy;
 };
 
 export const content: Record<Lang, Copy> = {
@@ -72,6 +106,7 @@ export const content: Record<Lang, Copy> = {
       docsComingSoon: "Dokumentation folgt.",
       alreadyCustomer: "Schon Kunde?",
       contactSales: "Vertrieb kontaktieren",
+      seePricing: "Preise ansehen",
     },
     overview: {
       title: "Zwei Werkzeuge für konsistentes Testen",
@@ -114,6 +149,49 @@ export const content: Record<Lang, Copy> = {
         "Blueprint-Modell: Code und Expertise, kein SaaS.",
       ],
     },
+    pricing: {
+      title: "Preise",
+      subtitle: "Pro User und Lizenz — jederzeit kündbar. Nicht gerätegebunden.",
+      cycleMonthly: "Monatlich",
+      cycleYearly: "Jährlich",
+      yearlyNote: "2 Monate gratis",
+      perUserMonth: "/ User · Monat",
+      perUserYear: "/ User · Jahr",
+      currencyLabel: "Währung",
+      recommended: "Empfohlen",
+      trial: {
+        name: "Trial",
+        price: "Kostenlos",
+        tagline: "14 Tage unverbindlich testen",
+        features: [
+          "Voller Funktionsumfang",
+          "Keine Zahlungsdaten nötig",
+          "Läuft automatisch aus",
+        ],
+        cta: "Trial starten",
+      },
+      subscription: {
+        name: "Abo",
+        tagline: "Monatlich oder jährlich, pro User",
+        features: [
+          "Pro User lizenziert",
+          "Kreditkarte oder Rechnung",
+          "Updates & Support inklusive",
+        ],
+        cta: "Abo starten",
+      },
+      onetime: {
+        name: "Einmalkauf",
+        price: "Preis auf Anfrage",
+        tagline: "Unbefristete Lizenz (Blueprint)",
+        features: [
+          "Unbefristete Nutzung",
+          "Individuelles Angebot",
+          "Ideal für feste Setups",
+        ],
+        cta: "Angebot anfragen",
+      },
+    },
   },
   en: {
     htmlLang: "en",
@@ -129,6 +207,7 @@ export const content: Record<Lang, Copy> = {
       docsComingSoon: "Documentation coming soon.",
       alreadyCustomer: "Already a customer?",
       contactSales: "Contact sales",
+      seePricing: "See pricing",
     },
     overview: {
       title: "Two tools for consistent testing",
@@ -170,6 +249,49 @@ export const content: Record<Lang, Copy> = {
         "Integrated: CC-Testframework included as the execution engine.",
         "Blueprint model: code and expertise, not SaaS.",
       ],
+    },
+    pricing: {
+      title: "Pricing",
+      subtitle: "Per user and license — cancel anytime. Not device-bound.",
+      cycleMonthly: "Monthly",
+      cycleYearly: "Yearly",
+      yearlyNote: "2 months free",
+      perUserMonth: "/ user · month",
+      perUserYear: "/ user · year",
+      currencyLabel: "Currency",
+      recommended: "Recommended",
+      trial: {
+        name: "Trial",
+        price: "Free",
+        tagline: "14 days, no commitment",
+        features: [
+          "Full feature set",
+          "No payment details required",
+          "Expires automatically",
+        ],
+        cta: "Start trial",
+      },
+      subscription: {
+        name: "Subscription",
+        tagline: "Monthly or yearly, per user",
+        features: [
+          "Licensed per user",
+          "Credit card or invoice",
+          "Updates & support included",
+        ],
+        cta: "Start subscription",
+      },
+      onetime: {
+        name: "One-time purchase",
+        price: "Price on request",
+        tagline: "Perpetual license (blueprint)",
+        features: [
+          "Perpetual use",
+          "Custom quote",
+          "Ideal for fixed setups",
+        ],
+        cta: "Request a quote",
+      },
     },
   },
 };
