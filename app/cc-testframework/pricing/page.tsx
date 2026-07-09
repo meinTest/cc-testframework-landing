@@ -21,10 +21,8 @@ export default async function FrameworkPricingPage({
   const lang = resolveLang(langParam);
   const t = content[lang];
 
-  const vetted = process.env.SALES_VETTED_MODE === "true";
-  const trialHref = vetted
-    ? `/demo-request?product=${PRODUCT}`
-    : "/signup";
+  // Trial is a sales-led request from the pricing page ("Trial anfragen").
+  const trialHref = `/demo-request?product=${PRODUCT}`;
 
   return (
     <main className="flex-1 px-6 py-16 sm:py-24">

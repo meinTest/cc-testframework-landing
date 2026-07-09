@@ -1,29 +1,39 @@
-// Subscription price config (Phase 1 — display only). CHF is authoritative
-// (45 / 450 per user). EUR/USD are placeholders at parity until the real
-// amounts are set as Stripe Prices; the currency picker charges in the chosen
-// currency once Stripe multi-currency Prices exist. Yearly = 10× monthly
-// (2 months free) → 450.
+// ─────────────────────────────────────────────────────────────────────────
+//  PRICING CONFIG — edit here when sales recalculates prices/rates.
+//  Base price is per user/month in CHF; other currencies are DERIVED from the
+//  exchange rates below (not a live feed — maintained here so it's a one-line
+//  change). Yearly = monthly × yearlyMonths.
+// ─────────────────────────────────────────────────────────────────────────
 
 export type Currency = "CHF" | "EUR" | "USD";
 export type BillingCycle = "monthly" | "yearly";
 
-export const CURRENCIES: Currency[] = ["CHF", "EUR", "USD"];
-
-// Price per user/seat, per month, by currency. Both products share this today.
-const MONTHLY_PER_USER: Record<Currency, number> = {
-  CHF: 45,
-  EUR: 45,
-  USD: 45,
+export const PRICING = {
+  /** Base price per user and month, in the base currency (CHF). */
+  baseMonthly: 45,
+  /** Yearly = this many months of the monthly price (10 → 2 months free → 450). */
+  yearlyMonths: 10,
+  /** CHF → currency conversion factor. Update to the current rate when needed. */
+  rates: {
+    CHF: 1,
+    EUR: 1.05,
+    USD: 1.12,
+  } as Record<Currency, number>,
 };
 
-const YEARLY_MONTHS = 10; // 2 months free
+export const CURRENCIES: Currency[] = ["CHF", "EUR", "USD"];
 
-export function unitPrice(currency: Currency, cycle: BillingCycle): number {
-  const monthly = MONTHLY_PER_USER[currency];
-  return cycle === "monthly" ? monthly : monthly * YEARLY_MONTHS;
+/** Monthly price per user in the given currency (base × rate, rounded). */
+function monthlyPrice(currency: Currency): number {
+  return Math.round(PRICING.baseMonthly * PRICING.rates[currency]);
 }
 
-/** e.g. "45 CHF". Amounts are whole numbers today, so no decimals needed. */
+export function unitPrice(currency: Currency, cycle: BillingCycle): number {
+  const monthly = monthlyPrice(currency);
+  return cycle === "monthly" ? monthly : monthly * PRICING.yearlyMonths;
+}
+
+/** e.g. "47 EUR". Amounts are whole numbers, so no decimals needed. */
 export function formatPrice(amount: number, currency: Currency): string {
   return `${amount} ${currency}`;
 }

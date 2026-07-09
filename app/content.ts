@@ -146,7 +146,7 @@ export const content: Record<Lang, Copy> = {
         "Kein Git-Wissen nötig: Versionierung passiert unsichtbar im Hintergrund.",
         "Für Fachtester gebaut: TypeScript-Test-Specs bearbeiten statt Tooling bedienen.",
         "Integriert: CC-Testframework als Ausführungs-Engine inklusive.",
-        "Blueprint-Modell: Code und Expertise, kein SaaS.",
+        
       ],
     },
     pricing: {
@@ -168,7 +168,7 @@ export const content: Record<Lang, Copy> = {
           "Keine Zahlungsdaten nötig",
           "Läuft automatisch aus",
         ],
-        cta: "Trial starten",
+        cta: "Trial anfragen",
       },
       subscription: {
         name: "Abo",
@@ -183,7 +183,7 @@ export const content: Record<Lang, Copy> = {
       onetime: {
         name: "Einmalkauf",
         price: "Preis auf Anfrage",
-        tagline: "Unbefristete Lizenz (Blueprint)",
+        tagline: "Unbefristete Lizenz",
         features: [
           "Unbefristete Nutzung",
           "Individuelles Angebot",
@@ -247,7 +247,7 @@ export const content: Record<Lang, Copy> = {
         "No Git knowledge required: versioning happens invisibly in the background.",
         "Built for functional testers: edit TypeScript test specs instead of operating tooling.",
         "Integrated: CC-Testframework included as the execution engine.",
-        "Blueprint model: code and expertise, not SaaS.",
+
       ],
     },
     pricing: {
@@ -269,7 +269,7 @@ export const content: Record<Lang, Copy> = {
           "No payment details required",
           "Expires automatically",
         ],
-        cta: "Start trial",
+        cta: "Request trial",
       },
       subscription: {
         name: "Subscription",
@@ -284,7 +284,7 @@ export const content: Record<Lang, Copy> = {
       onetime: {
         name: "One-time purchase",
         price: "Price on request",
-        tagline: "Perpetual license (blueprint)",
+        tagline: "Perpetual license",
         features: [
           "Perpetual use",
           "Custom quote",

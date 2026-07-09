@@ -18,11 +18,11 @@ export default async function Home({
   const cardFor: Record<ProductId, { name: string; tagline: string; blurb: string; href: string }> = {
     "cc-testframework": {
       ...t.overview.framework,
-      href: withLang("/cc-testframework", lang),
+      href: withLang("/cc-testframework/pricing", lang),
     },
     "cc-tmgmt": {
       ...t.overview.mgmt,
-      href: withLang("/cc-testmanagement", lang),
+      href: withLang("/cc-testmanagement/pricing", lang),
     },
   };
   const cards = offeredProducts().map((id) => cardFor[id]);
