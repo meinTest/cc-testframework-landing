@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import PricingSection from "../../PricingSection";
 import { content, resolveLang, withLang } from "../../content";
 import { isOffered, PRODUCT_LABELS } from "../../products";
+import { getProductPrices } from "../../pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,7 @@ export default async function ManagementPricingPage({
 
         <PricingSection
           copy={t.pricing}
+          prices={getProductPrices(PRODUCT)}
           trialHref={trialHref}
           subscriptionBaseHref={`/demo-request?product=${PRODUCT}&plan=subscription`}
           onetimeHref={`/demo-request?product=${PRODUCT}&plan=onetime`}

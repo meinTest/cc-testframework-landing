@@ -1,36 +1,52 @@
+import type { ProductId } from "./products";
+
 // ─────────────────────────────────────────────────────────────────────────
-//  PRICING CONFIG — edit here when sales recalculates prices/rates.
-//  Base price is per user/month in CHF; other currencies are DERIVED from the
-//  exchange rates below (not a live feed — maintained here so it's a one-line
-//  change). Yearly = monthly × yearlyMonths.
+//  PRICING CONFIG — explicit prices per user/seat, PER PRODUCT & currency.
+//  Edit DEFAULT_PRICES here, or override everything at once via the
+//  PRICING_JSON env var (same shape). Keep these in sync with the Stripe
+//  Prices once Stripe is live. `getProductPrices` is server-side (reads env).
 // ─────────────────────────────────────────────────────────────────────────
 
 export type Currency = "CHF" | "EUR" | "USD";
 export type BillingCycle = "monthly" | "yearly";
 
-export const PRICING = {
-  /** Base price per user and month, in the base currency (CHF). */
-  baseMonthly: 45,
-  /** Yearly = this many months of the monthly price (10 → 2 months free → 450). */
-  yearlyMonths: 10,
-  /** CHF → currency conversion factor. Update to the current rate when needed. */
-  rates: {
-    CHF: 1,
-    EUR: 1.05,
-    USD: 1.12,
-  } as Record<Currency, number>,
-};
-
 export const CURRENCIES: Currency[] = ["CHF", "EUR", "USD"];
 
-/** Monthly price per user in the given currency (base × rate, rounded). */
-function monthlyPrice(currency: Currency): number {
-  return Math.round(PRICING.baseMonthly * PRICING.rates[currency]);
+export interface PriceRow {
+  monthly: number;
+  yearly: number;
+}
+export type ProductPrices = Record<Currency, PriceRow>;
+
+// TODO: replace EUR/USD with the real amounts once sales confirms them.
+const DEFAULT_PRICES: Record<ProductId, ProductPrices> = {
+  "cc-testframework": {
+    CHF: { monthly: 45, yearly: 450 },
+    EUR: { monthly: 47, yearly: 470 },
+    USD: { monthly: 50, yearly: 500 },
+  },
+  "cc-tmgmt": {
+    CHF: { monthly: 45, yearly: 450 },
+    EUR: { monthly: 47, yearly: 470 },
+    USD: { monthly: 50, yearly: 500 },
+  },
+};
+
+/** Optional full override via env (JSON, same shape as DEFAULT_PRICES). */
+function loadOverride(): Partial<Record<ProductId, ProductPrices>> | null {
+  const raw = process.env.PRICING_JSON;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Partial<Record<ProductId, ProductPrices>>;
+  } catch {
+    console.error("[pricing] PRICING_JSON is not valid JSON — using defaults");
+    return null;
+  }
 }
 
-export function unitPrice(currency: Currency, cycle: BillingCycle): number {
-  const monthly = monthlyPrice(currency);
-  return cycle === "monthly" ? monthly : monthly * PRICING.yearlyMonths;
+/** Prices for a product. Server-side (may read PRICING_JSON); falls back to defaults. */
+export function getProductPrices(product: ProductId): ProductPrices {
+  return loadOverride()?.[product] ?? DEFAULT_PRICES[product];
 }
 
 /** e.g. "47 EUR". Amounts are whole numbers, so no decimals needed. */

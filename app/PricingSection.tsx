@@ -5,14 +5,16 @@ import Link from "next/link";
 import type { PricingCopy } from "./content";
 import {
   CURRENCIES,
-  unitPrice,
   formatPrice,
   type BillingCycle,
   type Currency,
+  type ProductPrices,
 } from "./pricing";
 
 interface PricingSectionProps {
   copy: PricingCopy;
+  // Per-currency prices for this product (resolved server-side from config/env).
+  prices: ProductPrices;
   // Where each bucket's CTA goes (trial is flag-aware, resolved server-side).
   trialHref: string;
   subscriptionBaseHref: string; // selected cycle/currency appended on click
@@ -21,6 +23,7 @@ interface PricingSectionProps {
 
 export default function PricingSection({
   copy,
+  prices,
   trialHref,
   subscriptionBaseHref,
   onetimeHref,
@@ -28,7 +31,9 @@ export default function PricingSection({
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [currency, setCurrency] = useState<Currency>("CHF");
 
-  const price = formatPrice(unitPrice(currency, cycle), currency);
+  const amount =
+    cycle === "monthly" ? prices[currency].monthly : prices[currency].yearly;
+  const price = formatPrice(amount, currency);
   const perUnit = cycle === "monthly" ? copy.perUserMonth : copy.perUserYear;
   const subscriptionHref = `${subscriptionBaseHref}&cycle=${cycle}&currency=${currency}`;
 
