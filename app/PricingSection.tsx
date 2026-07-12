@@ -6,6 +6,7 @@ import type { PricingCopy } from "./content";
 import {
   CURRENCIES,
   formatPrice,
+  YEARLY_DISCOUNT_PCT,
   type BillingCycle,
   type Currency,
   type ProductPrices,
@@ -76,7 +77,11 @@ export default function PricingSection({
         name={copy.subscription.name}
         price={price}
         priceSuffix={perUnit}
-        priceNote={cycle === "yearly" ? copy.yearlyNote : undefined}
+        priceNote={
+          cycle === "yearly"
+            ? copy.yearlyNote.replace("{pct}", String(YEARLY_DISCOUNT_PCT))
+            : undefined
+        }
         tagline={copy.subscription.tagline}
         features={copy.subscription.features}
         cta={copy.subscription.cta}
