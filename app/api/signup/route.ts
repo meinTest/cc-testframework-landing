@@ -159,7 +159,9 @@ export async function POST(request: Request) {
         {
           toEmail: input.email,
           customerName: input.name,
+          company: input.company,
           licenseKey: license.key,
+          licenseExpiry: license.expiry,
           origin: originFromRequest(request),
         },
         dryRun,
@@ -200,6 +202,7 @@ export async function POST(request: Request) {
         {
           toEmail: input.email,
           customerName: input.name,
+          company: input.company,
           licenseKey: license.key,
           licenseExpiry: license.expiry,
           invitationUrl: getInvitationUrl(org, repo),

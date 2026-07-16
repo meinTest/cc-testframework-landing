@@ -1,11 +1,13 @@
 import { Resend } from "resend";
 import { productLabel, type ProductId } from "../../../products";
+import { buildLicensePdf } from "./license-pdf";
 
 const LOG_PREFIX = "[signup][resend]";
 
 interface WelcomeInput {
   toEmail: string;
   customerName: string;
+  company: string;
   licenseKey: string;
   licenseExpiry: string | null;
   invitationUrl: string;
@@ -29,8 +31,18 @@ export async function sendWelcomeEmail(
 ): Promise<void> {
   const from = required("RESEND_FROM");
 
+  const licensePdf = await buildLicensePdf({
+    productName: productLabel("cc-testframework"),
+    licensee: input.customerName,
+    company: input.company,
+    licenseKey: input.licenseKey,
+    expiresAt: input.licenseExpiry,
+  });
+
   if (dryRun) {
-    console.log(`${LOG_PREFIX} DRY_RUN — would send welcome to ${input.toEmail}`);
+    console.log(
+      `${LOG_PREFIX} DRY_RUN — would send welcome to ${input.toEmail} with a ${licensePdf.length}-byte license PDF`,
+    );
     return;
   }
 
@@ -84,6 +96,12 @@ export async function sendWelcomeEmail(
     subject: "Your cc-testframework trial is ready",
     html,
     text,
+    attachments: [
+      {
+        filename: "cc-testframework-license.pdf",
+        content: Buffer.from(licensePdf),
+      },
+    ],
   });
 
   if (result.error) {
@@ -314,7 +332,9 @@ export async function sendOnboardInvite(
 interface TmgmtWelcomeInput {
   toEmail: string;
   customerName: string;
+  company: string;
   licenseKey: string;
+  licenseExpiry: string | null;
   // Base URL of this deployment, used to build gated download links.
   origin: string;
 }
@@ -325,9 +345,17 @@ export async function sendTmgmtWelcome(
 ): Promise<void> {
   const from = required("RESEND_FROM");
 
+  const licensePdf = await buildLicensePdf({
+    productName: productLabel("cc-tmgmt"),
+    licensee: input.customerName,
+    company: input.company,
+    licenseKey: input.licenseKey,
+    expiresAt: input.licenseExpiry,
+  });
+
   if (dryRun) {
     console.log(
-      `${LOG_PREFIX} DRY_RUN — would send cc-tmgmt welcome to ${input.toEmail}`,
+      `${LOG_PREFIX} DRY_RUN — would send cc-tmgmt welcome to ${input.toEmail} with a ${licensePdf.length}-byte license PDF`,
     );
     return;
   }
@@ -388,6 +416,12 @@ export async function sendTmgmtWelcome(
     subject: "Your CC Test Management access is ready",
     html,
     text,
+    attachments: [
+      {
+        filename: "cc-test-management-license.pdf",
+        content: Buffer.from(licensePdf),
+      },
+    ],
   });
 
   if (result.error) {
