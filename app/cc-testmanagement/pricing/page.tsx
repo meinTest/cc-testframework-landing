@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import PricingSection from "../../PricingSection";
 import { content, resolveLang, withLang } from "../../content";
 import { isOffered, PRODUCT_LABELS } from "../../products";
-import { getProductPrices } from "../../pricing";
+import { getDisplayPrices } from "../../lib/stripe-pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +24,7 @@ export default async function ManagementPricingPage({
 
   // cc-tmgmt has no self-serve trial — the trial bucket routes to sales.
   const trialHref = `/demo-request?product=${PRODUCT}`;
+  const prices = await getDisplayPrices(PRODUCT);
 
   return (
     <main className="flex-1 px-6 py-16 sm:py-24">
@@ -43,7 +44,7 @@ export default async function ManagementPricingPage({
 
         <PricingSection
           copy={t.pricing}
-          prices={getProductPrices(PRODUCT)}
+          prices={prices}
           trialHref={trialHref}
           subscriptionBaseHref={`/demo-request?product=${PRODUCT}&plan=subscription`}
           onetimeHref={`/demo-request?product=${PRODUCT}&plan=onetime`}
