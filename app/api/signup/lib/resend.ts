@@ -432,6 +432,71 @@ export async function sendTmgmtWelcome(
   );
 }
 
+interface SubscriptionKeysInput {
+  toEmail: string;
+  company: string;
+  productName: string;
+  keys: string[];
+  expiresAt: string;
+}
+
+export async function sendSubscriptionKeys(
+  input: SubscriptionKeysInput,
+  dryRun: boolean,
+): Promise<void> {
+  const from = required("RESEND_FROM");
+
+  if (dryRun) {
+    console.log(
+      `${LOG_PREFIX} DRY_RUN — would send ${input.keys.length} ${input.productName} key(s) to ${input.toEmail}`,
+    );
+    return;
+  }
+
+  const apiKey = required("RESEND_API_KEY");
+  const resend = new Resend(apiKey);
+  const renewsOn = new Date(input.expiresAt).toLocaleDateString("en-GB");
+  const rows = input.keys
+    .map((k, i) => `Seat ${i + 1}: ${k}`)
+    .join("\n");
+
+  const html = `
+    <h1>Your ${escape(input.productName)} license keys</h1>
+    <p>Thank you for your subscription. Here ${input.keys.length === 1 ? "is your license key" : "are your license keys"}
+       — one per seat. Hand out one key per user; each key is per named user.</p>
+    <pre>${escape(rows)}</pre>
+    <p>Your subscription renews on <strong>${renewsOn}</strong>; the keys stay valid as long as the subscription is active.</p>
+    <hr>
+    <p>Questions? Reach us at
+       <a href="mailto:support@meinTest.software">support@meinTest.software</a>.</p>
+  `;
+  const text = [
+    `Your ${input.productName} license keys`,
+    ``,
+    `Thank you for your subscription. One key per seat / user:`,
+    ``,
+    rows,
+    ``,
+    `Renews on ${renewsOn}; keys stay valid while the subscription is active.`,
+    ``,
+    `Questions? support@meinTest.software`,
+  ].join("\n");
+
+  const result = await resend.emails.send({
+    from,
+    to: input.toEmail,
+    subject: `Your ${input.productName} license keys`,
+    html,
+    text,
+  });
+  if (result.error) {
+    throw new Error(`Resend subscription keys send failed: ${result.error.message}`);
+  }
+  console.log(
+    `${LOG_PREFIX} sent ${input.keys.length} key(s) to ${input.toEmail} (id=${result.data?.id})`,
+  );
+}
+
 export async function notifySupport(
   input: SupportNotifyInput,
   dryRun: boolean,
