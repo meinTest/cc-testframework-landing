@@ -1,95 +1,139 @@
-# Abo-/Verkaufsmodell — Architektur & Verrechnung
+# Abo-/Verkaufsmodell — Architektur, Verrechnung & Lizenz-Provisionierung
 
-**Ziel (GL):** Framework **und** Testmanagement als **Abo** anbieten, plus **Einmalkauf**
-(Preis auf Anfrage). Pro Produkt eine Verkaufsseite mit **3 Buckets**. Stand 2026-07-01, Entwurf.
+**Zweck:** Framework **und** CC Test Management als **Abo** (Self-Service) + **Einmalkauf**
+(Preis auf Anfrage), inkl. Seat-basierter Lizenzierung und Ausbaustufe „Kunde verwaltet Lizenzen
+selbst". Maßgebliche Referenz. Stand 2026-07-17.
 
-**Entschieden:** Self-Service-**Direkt-Checkout** · **Stripe** (Kreditkarte **und** Rechnung) ·
-**echte Mehrwährungs-Abrechnung**.
+**Grundsatz-Entscheidungen (getroffen):**
+- Self-Service-**Stripe-Checkout**; **Stripe = Merchant of Record** (Rechnung im eigenen Namen,
+  MwSt über Stripe Tax). Kein Reseller/MoR-Broker.
+- **Echte Mehrwährung** (CHF/EUR/USD) — Preise **leben in Stripe** (Sales pflegt sie).
+- **Zahlarten:** Kreditkarte **und** Rechnung.
+- **Seat-Modell:** **1 Keygen-Lizenz (Key) pro Seat/User** — usergebunden, einzeln widerrufbar.
+- **QR-Rechnung (CH):** Stripe erzeugt keine Swiss-QR-Bill → Hybrid: Stripe für Karte +
+  Self-Service; klassische „auf Rechnung"-B2B-Deals über Buchhaltung (QR-Bill) + Sales-Flow.
 
 ---
 
-## 1. Die 3 Buckets (je Produkt)
+## 1. Die 3 Buckets (je Produkt, Verkaufsseite `/[produkt]/pricing`)
 
 | Bucket | Inhalt | Flow |
 |---|---|---|
-| **Trial** | 14 Tage, kostenlos | bestehender Signup-/Demo-Flow (steht) |
-| **Abo** | 45 CHF/User·Monat · 450 CHF/User·Jahr, Monats-/Jahres-Toggle, Währungspicker | **Stripe-Checkout** (neu) |
-| **Einmalkauf** | „Preis auf Anfrage" | bestehendes Demo-/Sales-Formular (steht) |
+| **Trial** | 14 Tage kostenlos | „Trial anfragen" → Demo/Sales-Flow (steht) |
+| **Abo** | pro User/Monat oder /Jahr, Seats | **Stripe-Checkout** (adjustable quantity) |
+| **Einmalkauf** | „Preis auf Anfrage" | Demo/Sales-Formular (steht) |
 
-Preis ist **pro User pro Lizenz** → im Abo ist die **Menge = Seats = Anzahl User**.
+## 2. Preise — Stripe ist Source of Truth *(implementiert)*
 
-## 2. Verrechnung (Stripe)
+- Die Pricing-Seiten **lesen die Preise live aus Stripe** (`app/lib/stripe-pricing.ts`,
+  In-Process-Cache ~5 Min). Zuordnung Stripe-Produkt → App-Produkt über **Product-Metadata**
+  `app_product` = `cc-testframework` | `cc-tmgmt`.
+- **Sales pflegt Preise komplett im Stripe-Dashboard** — Dev fasst dafür nichts an.
+- **Fallback:** fehlt Stripe / ein Preis, greift pro Währung die In-Code-Config
+  (`app/pricing.ts`) → Seite ist nie leer.
+- Rabatt-Badge („X% gespart") wird real aus Monats-/Jahrespreis berechnet.
 
-- **Stripe Billing** deckt in *einem* System ab: **Kreditkarte** (Checkout) **und** **Rechnung/
-  Bank-Transfer** (Checkout mit `payment_method_types` inkl. Invoice), **Abo** monatlich/jährlich,
-  **Mengen (Seats)** und **Mehrwährung** (echte Preise je Währung).
-- **Steuern:** **Stripe Tax** aktivieren → Schweizer MwSt (8.1 %) automatisch, EU-Reverse-Charge
-  für Geschäftskunden mit UID. Erspart manuelle Steuerlogik.
-- **Rechnung vs. Karte:** Karte = sofort aktiv; Rechnung = Lizenz erst bei Zahlungseingang aktiv
-  (Stripe-Invoice-`paid`-Webhook).
-- **Rolle Stripe:** Zahlungsabwickler + Billing-Engine — **ihr bleibt Merchant of Record**
-  (Rechnung im eigenen Namen, MwSt-Abführung bei euch; Stripe Tax berechnet). Kein Reseller/MoR.
-- **CH-Haken QR-Rechnung:** Stripe erzeugt **keine** Schweizer QR-Bill. Lösung = **Hybrid**:
-  Stripe für Karte + Self-Service-Abo; klassische „auf Rechnung"-B2B-Deals über das
-  Buchhaltungstool (QR-Bill) + den bestehenden Sales-Flow.
+## 3. Verrechnung (Stripe Billing)
 
-## 3. Der Kern: Stripe ↔ Keygen
+- **Karte** (Checkout) **und** **Rechnung/Bank-Transfer** in einem System.
+- **Stripe Tax** für MwSt (CH 8.1 %, EU-Reverse-Charge). Ihr bleibt Merchant of Record.
+- Karte → sofort aktiv; Rechnung → Lizenz erst bei `invoice.paid`.
 
-Die Lizenz-Infra (Keygen) steht schon; neu ist nur die **Kopplung über Webhooks**:
+## 4. Seat ↔ Lizenz-Modell
 
-```
-Kunde → /[produkt]/pricing → "Abo starten"
-  → POST /api/checkout  (Seats, Zyklus, Währung, Produkt)
-      → Stripe Checkout Session (mode=subscription, quantity=Seats)
-  → Zahlung
-  → Stripe-Webhook /api/stripe/webhook:
-      checkout.session.completed / invoice.paid   → Keygen-Lizenz(en) ausstellen/aktivieren
-      customer.subscription.updated (Seats±)       → Lizenzen nach-/abbauen
-      customer.subscription.deleted / past_due     → Lizenz(en) suspend/ablaufen
-  → Welcome-Mail mit Lizenzschlüssel(n)  (bestehendes Resend-Template, erweitert)
-```
+- **Menge (Seats) = Anzahl User = Anzahl Keygen-Keys.**
+- Seat-Auswahl über Stripe **`adjustable_quantity`** (im Checkout **und** später im
+  Customer-Portal) → kein eigener Mengen-UI-Bau nötig.
+- **Pro Seat eine eigene Keygen-Lizenz** (eigener Key). Begründung: die Produkte
+  authentifizieren per **Key** (Zugangscode), nicht per User-Login → ein geteilter Key mit
+  Zähler wäre nicht usergebunden. N Keys = usergebunden + einzeln widerrufbar/neu zuweisbar
+  (Standard für key-basierte Enterprise-Produkte).
 
-**Seat-Modell (Empfehlung):** **eine Keygen-Lizenz pro Seat** → jeder User hat einen eigenen,
-individuell entziehbaren/neu zuweisbaren Key. Menge in Stripe = Anzahl Keygen-Lizenzen.
-(Alternative: *eine* Lizenz mit `users`-Limit — weniger Keys, aber kein individuelles Sperren.)
+## 5. Checkout — `/api/checkout` *(zu bauen, Schritt 1)*
 
-**Trial → Paid & Verlängerung:** dieselbe Lizenz **behalten** und per Keygen `renew`/Policy-Wechsel
-aktualisieren → `licenseId` **und** Key bleiben (Kunde behält Zugangscode + Feedback-Historie;
-siehe frühere Keygen-Analyse). Nicht löschen + neu ausstellen.
+- Erzeugt eine Stripe **Checkout Session** (`mode=subscription`) mit:
+  - **Preis-ID** aus gewählter Währung/Zyklus (kommt aus `getStripePricing`),
+  - **`adjustable_quantity`** (Seats),
+  - **payment_method_types**: Karte + Rechnung,
+  - Success-/Cancel-URLs.
+- Der „Abo starten"-Button ruft das auf.
 
-## 4. Device-Bindung / Weitergabe
+## 6. Webhook — `/api/stripe/webhook` → Keygen-Lifecycle *(zu bauen, Schritt 2)*
 
-Die Keygen-Policy ist **nicht maschinengebunden** → ein MA kann seinen Key faktisch einem
-Kollegen geben (Absprache nötig). **Bewusst so gewünscht.** Da pro User verrechnet wird, aber
-nichts die Parallelnutzung technisch verhindert:
-- **Jetzt:** vertraglich/AGB regeln („1 Named User pro Seat").
-- **Optional später:** Keygen **Concurrency/Heartbeat** („max. 1 aktive Session pro Lizenz") —
-  bremst Sharing, ohne Gerätebindung.
+| Stripe-Event | Aktion in Keygen |
+|---|---|
+| `checkout.session.completed` / `invoice.paid` | **N Keygen-Lizenzen** (paid policy) anlegen, je mit Metadata `company`, `subscriptionId`, `product`, `seatIndex` |
+| `customer.subscription.updated` (Menge ±) | hoch → zusätzliche Keys anlegen; runter → überzählige Keys **suspendieren** (Reconcile) |
+| `customer.subscription.deleted` / `past_due` | alle Keys der Subscription **suspendieren/ablaufen** |
 
-## 5. Was extern aufzusetzen ist (du/GL)
+- **Idempotenz:** Keys pro `subscriptionId` + `seatIndex` eindeutig, damit Retries keine
+  Duplikate erzeugen.
+- **Zustellung:** Mail an Käufer/Admin mit **allen Keys** (+ optional Lizenz-PDF pro Key /
+  eine Sammel-PDF). Für viele Seats eher Liste/CSV statt N PDFs.
 
-- **Stripe-Account** (Live + Test), Firmen-/Bankdaten, Stripe Tax aktivieren.
-- **Produkte & Preise** in Stripe: je Produkt × {Monat, Jahr} × {CHF, EUR, USD} → Preis-IDs.
-- **Webhook-Endpoint** `…/api/stripe/webhook` registrieren → Signing-Secret.
-- **Keygen:** bezahlte Policy(s) (unbefristet bzw. jährlich verlängerbar) neben der Trial-Policy.
-- **Env in Vercel:** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` (oder eine
-  JSON-Map Produkt→Währung→Zyklus→PriceId), `KEYGEN_*_PAID_POLICY_ID`.
+## 7. Daten-Erfassung / User-Zuordnung
 
-## 6. Roadmap (klein & testbar)
+- **v1 (schlank):** Beim Kauf kennen wir nur den **Käufer**. Keys werden als **„unassigned
+  Seats"** von Firma X angelegt; die **User-Zuordnung** entsteht bei der **ersten Aktivierung**
+  (Keygen erfasst User/Machine). Kein Extra-Bau.
+- **Metadata pro Key:** `company`, `subscriptionId`, `product`, `seatIndex`, später `assignedUser`.
 
-1. **Phase 1 — Verkaufsseiten-UI** ✅ **erledigt**: `/cc-testframework/pricing` +
-   `/cc-testmanagement/pricing`, 3 Buckets, Monats-/Jahres-Toggle, Währungspicker (CHF/EUR/USD),
-   Preise aus `app/pricing.ts`. Abo-CTA führt **vorerst** in den Sales-/Demo-Flow (trägt
-   product/plan/cycle/currency mit); wird in Phase 2 auf Stripe-Checkout umgestellt.
-2. **Phase 2 — Stripe-Checkout** (`/api/checkout`) + Success/Cancel-Seiten.
-3. **Phase 3 — Webhook** (`/api/stripe/webhook`) → Keygen-Lizenz-Lifecycle + Welcome-Mail.
-4. **Phase 4 — Self-Service-Verwaltung** (Stripe Customer Portal: Seats ändern, Kündigen, Rechnungen).
+---
 
-## 7. Offene Punkte (bitte bestätigen)
+## 8. Ausbaustufe — Kunde verwaltet Lizenzen selbst
 
-- **Währungen + Beträge:** CHF 45/450 fix. EUR/USD-Beträge? (Vorschlag: Parität 45/450, in Stripe
-  final gepflegt.) Welche Währungen insgesamt (CHF/EUR/USD)?
-- **Gleicher Preis für beide Produkte?** (Annahme: ja, 45/450 je User.)
-- **Seat-Modell:** eine Lizenz pro Seat (empfohlen) vs. eine Lizenz mit User-Limit.
-- **MwSt:** Stripe Tax aktivieren? (empfohlen)
-- **Mindest-Seats / Rabatt bei Jahreszahlung?** (450 = 10×45 → 2 Monate gratis bei Jahr — ok?)
+Zwei Ebenen, unabhängig aktivierbar:
+
+### 8a. Stripe Customer Portal *(billing — sehr wenig Bau)*
+Stripe-gehostet, nur aktivieren + Portal-Link erzeugen. Der Kunde kann selbst:
+- **Zahlungsmittel** ändern, **Rechnungen** herunterladen,
+- **Seats hoch-/runterstufen** (Menge ändern → Webhook reconciled die Keys),
+- **kündigen**.
+→ Deckt die **kaufmännische** Selbstverwaltung komplett ab, ohne Eigenbau.
+
+### 8b. meinTest Lizenz-Admin-Bereich *(Lizenz-/User-Verwaltung — Eigenbau, Folge-Feature)*
+Ein authentifizierter Bereich (z. B. `/account`) für den **Kunden-Admin**:
+- **Übersicht** aller Lizenzen/Keys + Status (aktiv/suspendiert, letzte Aktivierung),
+- **Key einem User zuweisen** (Name/E-Mail) → schreibt Keygen-Metadata/legt Keygen-User an,
+- **Key entziehen/neu zuweisen** (MA verlässt Firma → Seat freigeben),
+- **Nutzung** einsehen, **Lizenz-PDF(s)** herunterladen,
+- Seats kaufen/ändern → Deep-Link ins Stripe-Portal (Billing bleibt in Stripe).
+
+**Auth (Vorschlag):**
+- **v1 Portal:** Magic-Link an die Billing-/Admin-E-Mail (wie unsere bestehenden Signup-Links).
+- **Enterprise-Ausbau:** SSO/SAML, mehrere Admins, Rollen.
+
+**Datenmodell:** Stripe = Quelle für **Billing/Seat-Anzahl**; Keygen = Quelle für **Keys +
+User-Zuordnung**; der Admin-Bereich ist die **UI darüber** (liest/schreibt Keygen, verlinkt
+Stripe). Seats erhöhen läuft **immer über Stripe** (Billing), der Webhook legt die Keys an, der
+Admin weist sie zu.
+
+**Abgrenzung:** 8a löst „Kunde verwaltet **Abo/Zahlung** selbst" mit minimalem Bau. 8b löst
+„Kunde verwaltet **Keys/User** selbst" und ist der eigentliche Enterprise-Ausbau — **nicht Teil
+von v1**.
+
+---
+
+## 9. Roadmap
+
+1. **Preise aus Stripe** ✅ (implementiert, live).
+2. **`/api/checkout`** (Session + adjustable quantity + Karte/Rechnung) + Success/Cancel.
+3. **`/api/stripe/webhook`** → Keygen-Key-Provisionierung (N Keys) + Zustellung + Reconcile.
+4. **Stripe Customer Portal** aktivieren (8a) — Billing-Selfservice.
+5. **Lizenz-Admin-Bereich** (8b) — Key/User-Selbstverwaltung (Enterprise-Ausbau).
+
+## 10. Extern aufzusetzen (du/GL)
+
+- **Stripe:** Account (Test/Live), Produkte + Preise (Metadata `app_product`), Stripe Tax,
+  Webhook-Endpoint + Signing-Secret, Customer Portal aktivieren.
+- **Keygen:** **bezahlte Policy(s)** (unbefristet bzw. jährlich verlängerbar) neben der Trial-
+  Policy — pro Produkt oder gemeinsam.
+- **Vercel-Env:** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `KEYGEN_*_PAID_POLICY_ID`.
+
+## 11. Offene Punkte
+
+- Bezahlte Keygen-Policy(s) anlegen (pro Produkt vs. gemeinsam).
+- Zustellformat bei vielen Seats (Key-Liste/CSV vs. N PDFs).
+- Verlängerung: `renew`/Policy-Wechsel derselben Lizenz (Key bleibt) statt neu ausstellen.
+- Device-/Concurrency-Politik: nicht gerätegebunden; optional später Keygen-Concurrency
+  („1 aktive Session pro Key") gegen Sharing.
