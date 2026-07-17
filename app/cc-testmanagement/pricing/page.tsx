@@ -46,7 +46,7 @@ export default async function ManagementPricingPage({
           copy={t.pricing}
           prices={prices}
           trialHref={trialHref}
-          subscriptionBaseHref={`/demo-request?product=${PRODUCT}&plan=subscription`}
+          subscriptionBaseHref={`/api/checkout?product=${PRODUCT}`}
           onetimeHref={`/demo-request?product=${PRODUCT}&plan=onetime`}
         />
       </div>
