@@ -22,6 +22,8 @@ export interface LicensePdfInput {
   licenseKey: string;
   /** ISO date or null for a perpetual license. */
   expiresAt: string | null;
+  /** ISO issue/start date. Defaults to now. */
+  issuedAt?: string;
 }
 
 export async function buildLicensePdf(
@@ -39,7 +41,8 @@ export async function buildLicensePdf(
 
   const margin = 56;
   const right = width - margin;
-  const now = new Date();
+  // Issue/start date drives the "Bern, <date>" line, the Issued row and the footer.
+  const now = input.issuedAt ? new Date(input.issuedAt) : new Date();
 
   // ── Letterhead: logo (left) + address (right) ──────────────────────────
   const logo = await pdf.embedPng(Buffer.from(LICENSE_LOGO_PNG_BASE64, "base64"));
