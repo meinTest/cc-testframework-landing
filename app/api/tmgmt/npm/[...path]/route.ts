@@ -13,8 +13,9 @@ import {
 // and can `npm install @meintest/…` with only a valid license — no GitHub access.
 
 const PREFIX = "/api/tmgmt/npm/";
-// @meintest/<pkg>/-/<file>.tgz
-const TARBALL_RE = /^@meintest\/([^/]+)\/-\/(.+\.tgz)$/;
+// @meintest/<pkg>/-/<file> — GitHub Packages names the tarball with a bare SHA
+// (no .tgz extension), so match anything after `/-/`.
+const TARBALL_RE = /^@meintest\/([^/]+)\/-\/(.+)$/;
 // @meintest/<pkg>
 const PACKUMENT_RE = /^@meintest\/([^/]+)$/;
 
