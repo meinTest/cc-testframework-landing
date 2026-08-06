@@ -89,6 +89,29 @@ export async function checkEntitlement(
   return { ok: true, licenseId, company };
 }
 
+// Cached wrapper: the npm registry proxy fires many metadata/tarball requests,
+// so we must not hit Keygen on every call. Caches the verdict per key ~5 min.
+const ENTITLEMENT_TTL_MS = 5 * 60 * 1000;
+const entitlementCache = new Map<string, { at: number; result: EntitlementResult }>();
+
+export async function checkEntitlementCached(
+  licenseKey: string,
+  dryRun: boolean,
+): Promise<EntitlementResult> {
+  if (!licenseKey) return { ok: false, status: 401, reason: "Missing license key" };
+
+  const now = Date.now();
+  const hit = entitlementCache.get(licenseKey);
+  if (hit && now - hit.at < ENTITLEMENT_TTL_MS) return hit.result;
+
+  const result = await checkEntitlement(licenseKey, dryRun);
+  // Don't cache transient upstream failures (502); do cache stable ok/401/403.
+  if (!(result.ok === false && result.status === 502)) {
+    entitlementCache.set(licenseKey, { at: now, result });
+  }
+  return result;
+}
+
 /**
  * Validate a license and return status details for the license-status endpoint:
  * expiry + licensee/company (the customer's own data), classified into
