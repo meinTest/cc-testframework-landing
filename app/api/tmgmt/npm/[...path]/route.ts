@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkEntitlementCached, licenseKeyFromRequest } from "../../lib/entitlement";
+import { rateLimit } from "../../lib/rate-limit";
 import {
   getProxiedPackument,
   resolveOriginalTarball,
@@ -27,6 +28,19 @@ export async function GET(request: Request) {
   const entitlement = await checkEntitlementCached(licenseKeyFromRequest(request), dryRun);
   if (!entitlement.ok) {
     return npmError(entitlement.status, entitlement.reason);
+  }
+
+  // Per-license abuse cap (default 60 req/min).
+  const perMinute = Number(process.env.NPM_RATE_LIMIT_PER_MIN) || 60;
+  const rl = rateLimit(`npm:${entitlement.licenseId}`, perMinute, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rl.retryAfterSec), "Cache-Control": "no-store" },
+      },
+    );
   }
 
   // Parse the package specifier from the RAW pathname so the scoped name's %2f
