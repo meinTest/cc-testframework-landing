@@ -30,6 +30,16 @@ interface RawPackument {
 let tokenCache: { at: number; token: string } | null = null;
 const packumentCache = new Map<string, { at: number; data: RawPackument }>();
 
+// Credential for npm.pkg.github.com. GitHub's npm registry does NOT accept
+// GitHub App installation tokens (returns 403 even with packages:read), so a
+// scoped GH_PACKAGES_TOKEN (fine-grained PAT with packages:read, or classic PAT
+// with read:packages) is used when set. The App token remains as a fallback.
+async function packagesAuthToken(): Promise<string> {
+  const pat = process.env.GH_PACKAGES_TOKEN;
+  if (pat) return pat;
+  return installationToken();
+}
+
 async function installationToken(): Promise<string> {
   const now = Date.now();
   if (tokenCache && now - tokenCache.at < TOKEN_TTL_MS) return tokenCache.token;
@@ -51,7 +61,7 @@ async function fetchRawPackument(pkg: string): Promise<RawPackument> {
   const hit = packumentCache.get(pkg);
   if (hit && now - hit.at < PACKUMENT_TTL_MS) return hit.data;
 
-  const token = await installationToken();
+  const token = await packagesAuthToken();
   const res = await fetch(`${GH_NPM}/@meintest%2f${encodeURIComponent(pkg)}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
   });
@@ -96,7 +106,7 @@ export async function resolveOriginalTarball(
 
 /** Fetch a tarball from GitHub Packages with the service token (for streaming). */
 export function fetchTarball(url: string): Promise<Response> {
-  return installationToken().then((token) =>
+  return packagesAuthToken().then((token) =>
     fetch(url, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/octet-stream" },
     }),
