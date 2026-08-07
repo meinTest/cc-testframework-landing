@@ -25,7 +25,12 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const dryRun = process.env.DRY_RUN === "true";
 
-  const entitlement = await checkEntitlementCached(licenseKeyFromRequest(request), dryRun);
+  // The @meintest/cc-testframework package is served to both a standalone
+  // framework license and a cc-tmgmt license (which depends on the framework).
+  const entitlement = await checkEntitlementCached(licenseKeyFromRequest(request), dryRun, [
+    "cc-testframework",
+    "cc-tmgmt",
+  ]);
   if (!entitlement.ok) {
     return npmError(entitlement.status, entitlement.reason);
   }

@@ -15,7 +15,6 @@ interface CreateLicenseInput {
   email: string;
   name: string;
   company: string;
-  githubUsername: string;
   product: ProductId;
 }
 
@@ -60,7 +59,6 @@ export async function createTrialLicense(
               email: input.email,
               customerName: input.name,
               company: input.company,
-              githubUsername: input.githubUsername,
               signupAt: new Date().toISOString(),
             },
           },

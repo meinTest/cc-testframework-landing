@@ -6,6 +6,11 @@ import type { ProductId } from "../../../products";
 
 const LOG_PREFIX = "[tmgmt][entitlement]";
 const PRODUCT: ProductId = "cc-tmgmt";
+// Default gate for the cc-tmgmt-only resources (download/updates/feedback). The
+// npm registry proxy overrides this — the @meintest/cc-testframework package is
+// legitimately consumed by both a standalone framework license and a cc-tmgmt
+// license (which pulls the framework as a dependency).
+const DEFAULT_ALLOWED: readonly ProductId[] = [PRODUCT];
 
 export type EntitlementResult =
   | { ok: true; licenseId: string; company: string }
@@ -27,7 +32,8 @@ export type LicenseDescription =
  *
  * Uses Keygen's public `validate-key` action (no admin token needed — the key
  * itself is the credential). The license must validate as ACTIVE/valid and its
- * metadata.product must be "cc-tmgmt".
+ * metadata.product must be one of `allowedProducts` (defaults to cc-tmgmt only;
+ * the npm proxy passes both products).
  *
  * In DRY_RUN any non-empty key is accepted (so the proxy can be smoke-tested
  * without hitting Keygen), but a missing key is still rejected.
@@ -35,13 +41,16 @@ export type LicenseDescription =
 export async function checkEntitlement(
   licenseKey: string,
   dryRun: boolean,
+  allowedProducts: readonly ProductId[] = DEFAULT_ALLOWED,
 ): Promise<EntitlementResult> {
   if (!licenseKey) {
     return { ok: false, status: 401, reason: "Missing license key" };
   }
 
   if (dryRun) {
-    console.log(`${LOG_PREFIX} DRY_RUN — accepting key ${mask(licenseKey)} as ${PRODUCT}`);
+    console.log(
+      `${LOG_PREFIX} DRY_RUN — accepting key ${mask(licenseKey)} for ${allowedProducts.join("|")}`,
+    );
     return { ok: true, licenseId: "dry-run-license-id", company: "DryRun Co" };
   }
 
@@ -76,8 +85,12 @@ export async function checkEntitlement(
   }
 
   const product = body?.data?.attributes?.metadata?.product;
-  if (product !== PRODUCT) {
-    return { ok: false, status: 403, reason: "License is not entitled for cc-tmgmt" };
+  if (!allowedProducts.includes(product as ProductId)) {
+    return {
+      ok: false,
+      status: 403,
+      reason: `License is not entitled (requires ${allowedProducts.join(" or ")})`,
+    };
   }
 
   const licenseId = body?.data?.id ?? "";
@@ -97,17 +110,21 @@ const entitlementCache = new Map<string, { at: number; result: EntitlementResult
 export async function checkEntitlementCached(
   licenseKey: string,
   dryRun: boolean,
+  allowedProducts: readonly ProductId[] = DEFAULT_ALLOWED,
 ): Promise<EntitlementResult> {
   if (!licenseKey) return { ok: false, status: 401, reason: "Missing license key" };
 
+  // Key the cache by the allowed-product set too, so a verdict granted under a
+  // wider gate is never reused for a stricter caller.
+  const cacheKey = `${allowedProducts.join(",")}::${licenseKey}`;
   const now = Date.now();
-  const hit = entitlementCache.get(licenseKey);
+  const hit = entitlementCache.get(cacheKey);
   if (hit && now - hit.at < ENTITLEMENT_TTL_MS) return hit.result;
 
-  const result = await checkEntitlement(licenseKey, dryRun);
+  const result = await checkEntitlement(licenseKey, dryRun, allowedProducts);
   // Don't cache transient upstream failures (502); do cache stable ok/401/403.
   if (!(result.ok === false && result.status === 502)) {
-    entitlementCache.set(licenseKey, { at: now, result });
+    entitlementCache.set(cacheKey, { at: now, result });
   }
   return result;
 }

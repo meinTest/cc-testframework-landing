@@ -10,7 +10,8 @@ interface WelcomeInput {
   company: string;
   licenseKey: string;
   licenseExpiry: string | null;
-  invitationUrl: string;
+  // Base URL of this deployment, used to build the .npmrc registry snippet.
+  origin: string;
   quickstartUrlEn: string;
   quickstartUrlDe: string;
 }
@@ -19,7 +20,6 @@ interface SupportNotifyInput {
   customerName: string;
   customerEmail: string;
   company: string;
-  githubUsername: string;
   licenseId: string;
   licenseKey: string;
   product: ProductId;
@@ -53,17 +53,28 @@ export async function sendWelcomeEmail(
     ? `Your trial is active until <strong>${new Date(input.licenseExpiry).toLocaleDateString("en-GB")}</strong>.`
     : `Your trial is now active.`;
 
+  // License-brokered npm registry: the customer installs @meintest/cc-testframework
+  // with only their license key — no GitHub account. The registry lives under
+  // /api/tmgmt/npm and authenticates the same CC_LICENSE_KEY as the runtime.
+  const origin = input.origin.replace(/\/$/, "");
+  const registryPath = "/api/tmgmt/npm/";
+  const registryUrl = `${origin}${registryPath}`;
+  const authRef = `${origin.replace(/^https?:/, "")}${registryPath}`; // //host/api/tmgmt/npm/
+  const npmrc = `@meintest:registry=${registryUrl}\n${authRef}:_authToken=${input.licenseKey}`;
+
   const html = `
     <h1>Welcome to cc-testframework</h1>
     <p>Hi ${escape(input.customerName)},</p>
     <p>your 14-day trial is ready. ${expiryLine}</p>
-    <h2>1. Accept your GitHub invite</h2>
-    <p>You have been added to the <code>meinTest/cc-testframework</code> repository.
-       Open the invitation here:<br>
-       <a href="${input.invitationUrl}">${input.invitationUrl}</a></p>
-    <h2>2. Configure your license key</h2>
-    <p>Set the following environment variable on the machine that runs the tests:</p>
+    <h2>1. Configure your license key</h2>
+    <p>Set this environment variable on the machine that runs the tests. The same
+       key also authenticates the package registry — no GitHub account required:</p>
     <pre>CC_LICENSE_KEY=${escape(input.licenseKey)}</pre>
+    <h2>2. Point npm at the license-gated registry</h2>
+    <p>Add this to your project's <code>.npmrc</code>:</p>
+    <pre>${escape(npmrc)}</pre>
+    <p>then install the framework as usual:</p>
+    <pre>npm install @meintest/cc-testframework</pre>
     <h2>3. Read the quickstart</h2>
     <p>
       <a href="${input.quickstartUrlEn}">English</a> &nbsp;|&nbsp;
@@ -81,8 +92,11 @@ export async function sendWelcomeEmail(
     ``,
     `your 14-day trial is ready. ${expiryLine.replace(/<[^>]+>/g, "")}`,
     ``,
-    `1. Accept your GitHub invite: ${input.invitationUrl}`,
-    `2. Configure your license: CC_LICENSE_KEY=${input.licenseKey}`,
+    `1. Configure your license (also authenticates the registry — no GitHub needed):`,
+    `   CC_LICENSE_KEY=${input.licenseKey}`,
+    `2. Add this to your project's .npmrc:`,
+    ...npmrc.split("\n").map((l) => `   ${l}`),
+    `   then: npm install @meintest/cc-testframework`,
     `3. Read the quickstart:`,
     `   English: ${input.quickstartUrlEn}`,
     `   Deutsch: ${input.quickstartUrlDe}`,
@@ -519,7 +533,6 @@ export async function notifySupport(
     `Name:           ${input.customerName}`,
     `Email:          ${input.customerEmail}`,
     `Company:        ${input.company}`,
-    `GitHub:         ${input.githubUsername}`,
     `License ID:     ${input.licenseId}`,
     `License Key:    ${input.licenseKey}`,
     ``,

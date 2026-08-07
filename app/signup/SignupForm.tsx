@@ -20,11 +20,10 @@ interface SignupFormProps {
   prefill?: Prefill;
 }
 
-export default function SignupForm({ token, product, prefill }: SignupFormProps) {
+export default function SignupForm({ token, prefill }: SignupFormProps) {
   const [state, setState] = useState<FormState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const needsGithub = product !== "cc-tmgmt";
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -38,7 +37,6 @@ export default function SignupForm({ token, product, prefill }: SignupFormProps)
       email: prefill ? prefill.email : formData.get("email"),
       company: prefill ? prefill.company : formData.get("company"),
       token: formData.get("token") || undefined,
-      ...(needsGithub ? { githubUsername: formData.get("githubUsername") } : {}),
     };
 
     try {
@@ -84,8 +82,10 @@ export default function SignupForm({ token, product, prefill }: SignupFormProps)
     );
   }
 
-  // Vetted flow with nothing left to enter (cc-tmgmt): one-click activation.
-  const oneClick = Boolean(prefill) && !needsGithub;
+  // Vetted flow with nothing left to enter: one-click activation. Neither product
+  // collects anything beyond the prefilled details anymore (the framework install
+  // is license-based, so there is no GitHub username to capture).
+  const oneClick = Boolean(prefill);
 
   return (
     <main className="flex-1 flex items-center justify-center px-6 py-16">
@@ -119,14 +119,6 @@ export default function SignupForm({ token, product, prefill }: SignupFormProps)
             </>
           )}
 
-          {needsGithub && (
-            <Field
-              name="githubUsername"
-              label="GitHub username"
-              required
-              hint="Used to send your repository invite."
-            />
-          )}
           {token && <input type="hidden" name="token" value={token} />}
 
           <button
