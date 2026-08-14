@@ -7,6 +7,7 @@ import {
   type FeedbackType,
 } from "../lib/issues";
 import { parseImages, uploadImages } from "../lib/screenshots";
+import { feedbackRateLimit } from "../lib/limit";
 
 // Edit / withdraw a customer's own feedback report — allowed ONLY while the
 // report is still in the `received` state. Ownership and state are enforced
@@ -28,6 +29,9 @@ export async function PATCH(request: Request, { params }: Params) {
       { status: entitlement.status },
     );
   }
+
+  const limited = feedbackRateLimit(entitlement.licenseId);
+  if (limited) return limited;
 
   const issueNumber = parseIssueNumber((await params).issueNumber);
   if (issueNumber === null) {
@@ -121,6 +125,9 @@ export async function DELETE(request: Request, { params }: Params) {
       { status: entitlement.status },
     );
   }
+
+  const limited = feedbackRateLimit(entitlement.licenseId);
+  if (limited) return limited;
 
   const issueNumber = parseIssueNumber((await params).issueNumber);
   if (issueNumber === null) {

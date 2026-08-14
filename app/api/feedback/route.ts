@@ -9,6 +9,7 @@ import {
   type FeedbackType,
 } from "./lib/issues";
 import { parseImages, uploadImages } from "./lib/screenshots";
+import { feedbackRateLimit } from "./lib/limit";
 
 // In-app feedback proxy for cc-tmgmt: turns license-authenticated feature/bug
 // reports into GitHub issues and reads back only the customer's own status.
@@ -29,6 +30,9 @@ export async function POST(request: Request) {
       { status: entitlement.status },
     );
   }
+
+  const limited = feedbackRateLimit(entitlement.licenseId);
+  if (limited) return limited;
 
   let payload: unknown;
   try {
@@ -99,6 +103,9 @@ export async function GET(request: Request) {
       { status: entitlement.status },
     );
   }
+
+  const limited = feedbackRateLimit(entitlement.licenseId);
+  if (limited) return limited;
 
   try {
     const reports = await listCustomerIssues(entitlement.licenseId, dryRun);
