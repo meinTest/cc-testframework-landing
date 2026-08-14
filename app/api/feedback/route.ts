@@ -8,6 +8,7 @@ import {
   type FeedbackSource,
   type FeedbackType,
 } from "./lib/issues";
+import { parseImages, uploadImages } from "./lib/screenshots";
 
 // In-app feedback proxy for cc-tmgmt: turns license-authenticated feature/bug
 // reports into GitHub issues and reads back only the customer's own status.
@@ -47,8 +48,25 @@ export async function POST(request: Request) {
     );
   }
 
+  // Screenshots (optional): validate + upload to GitHub. Fully non-fatal — a bad
+  // image is dropped and an upload failure just omits it; the report still files.
+  let imageUrls: string[] = [];
+  const rawImages =
+    typeof payload === "object" && payload !== null
+      ? (payload as Record<string, unknown>).images
+      : undefined;
+  const images = parseImages(rawImages);
+  if (images.length > 0) {
+    try {
+      imageUrls = await uploadImages(images, dryRun);
+    } catch (err) {
+      console.error(`${LOG_PREFIX} screenshot upload batch failed (non-fatal)`, err);
+    }
+  }
+
   const input: CreateIssueInput = {
     ...validation.value,
+    imageUrls,
     company: entitlement.company,
     licenseId: entitlement.licenseId,
   };

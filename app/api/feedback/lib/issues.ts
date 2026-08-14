@@ -48,6 +48,9 @@ export interface CreateIssueInput {
   repro?: string;
   source: FeedbackSource;
   context: FeedbackContext;
+  // Public raw URLs of screenshots already uploaded to GitHub (see screenshots.ts).
+  // Embedded verbatim into a `## Screenshots` body section. Empty when none.
+  imageUrls?: string[];
   // Server-derived from the license — never from the client.
   company: string;
   licenseId: string;
@@ -96,12 +99,16 @@ export async function createIssue(
   input: CreateIssueInput,
   dryRun: boolean,
 ): Promise<CreatedIssue> {
-  const body = buildBody(input.description, input.repro);
+  const body = buildBody(
+    input.description,
+    input.repro,
+    buildScreenshotsSection(input.imageUrls ?? []),
+  );
   const labels = buildLabels(input);
 
   if (dryRun) {
     console.log(
-      `${LOG_PREFIX} DRY_RUN — would create ${input.type} issue "${input.title}" labels=[${labels.join(", ")}]`,
+      `${LOG_PREFIX} DRY_RUN — would create ${input.type} issue "${input.title}" labels=[${labels.join(", ")}] images=${input.imageUrls?.length ?? 0}`,
     );
     return { issueNumber: 0, issueId: 0, createdAt: new Date().toISOString() };
   }
@@ -187,13 +194,41 @@ export async function listCustomerIssues(
   return reports;
 }
 
-// The issue body carries only the customer's own text now. Telemetry
-// (version/platform/os) lives in structured labels, and the app appends its
-// own "## Robin-Kontext" / "## System-Log" sections into the description.
-function buildBody(description: string, repro: string | undefined): string {
+// Heading for the user-provided screenshots (uploaded to GitHub by screenshots.ts).
+// Placed last in the body — after Beschreibung + Reproschritte. (The old
+// "## Automatisch erfasster Kontext" block it used to precede was removed in #3.)
+const SCREENSHOTS_HEADING = "## Screenshots";
+
+// The issue body carries only the customer's own text and, optionally, an
+// uploaded-screenshots section. Telemetry (version/platform/os) lives in
+// structured labels, and the app appends its own "## Robin-Kontext" /
+// "## System-Log" sections into the description.
+function buildBody(
+  description: string,
+  repro: string | undefined,
+  screenshotsSection?: string | null,
+): string {
   const lines: string[] = ["## Beschreibung", "", description];
   if (repro) lines.push("", "## Reproduktionsschritte", "", repro);
+  if (screenshotsSection) lines.push("", screenshotsSection);
   return lines.join("\n");
+}
+
+// Markdown section embedding each already-uploaded screenshot. null when none.
+function buildScreenshotsSection(imageUrls: string[]): string | null {
+  if (imageUrls.length === 0) return null;
+  const refs = imageUrls.map((url, i) => `![screenshot-${i + 1}](${url})`);
+  return [SCREENSHOTS_HEADING, "", ...refs].join("\n");
+}
+
+// On edit the client sends no images, so preserve the existing screenshots
+// section verbatim. It runs from its heading to the next "## " heading or EOF.
+function extractScreenshotsSection(body: string): string | null {
+  const start = body.indexOf(SCREENSHOTS_HEADING);
+  if (start < 0) return null;
+  const rest = body.slice(start);
+  const next = rest.indexOf("\n## ", SCREENSHOTS_HEADING.length);
+  return (next >= 0 ? rest.slice(0, next) : rest).trimEnd();
 }
 
 /**
@@ -264,7 +299,12 @@ export async function updateIssue(
   input: UpdateIssueInput,
   dryRun: boolean,
 ): Promise<{ updatedAt: string }> {
-  const body = buildBody(input.description, input.repro);
+  // No `images` on edit ⇒ keep the screenshots already in the issue untouched.
+  const body = buildBody(
+    input.description,
+    input.repro,
+    extractScreenshotsSection(issue.body),
+  );
   // Swap the type:* label; keep everything else (customer/company/source and the
   // version/platform/os telemetry labels — the client never resends telemetry on
   // edit, so the labels set at creation are preserved as-is).
@@ -427,7 +467,8 @@ async function releasedReason(
   return last.trimStart().slice(CUSTOMER_VISIBLE_SENTINEL.length).trim() || null;
 }
 
-function octokit(): Octokit {
+// Exported so the screenshots uploader shares the same GitHub App auth + repo.
+export function octokit(): Octokit {
   const appId = required("GH_APP_ID");
   const installationId = required("GH_APP_INSTALLATION_ID");
   const privateKey = required("GH_APP_PRIVATE_KEY").replace(/\\n/g, "\n");
@@ -441,7 +482,7 @@ function octokit(): Octokit {
   });
 }
 
-function repoCoords(): { owner: string; repo: string } {
+export function repoCoords(): { owner: string; repo: string } {
   const [owner, repo] = required("FEEDBACK_REPO").split("/");
   if (!owner || !repo) {
     throw new Error("FEEDBACK_REPO must be in the form owner/repo");
