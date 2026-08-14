@@ -63,11 +63,7 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   try {
-    const result = await updateIssue(
-      guard.issue,
-      { ...validation.value, company: entitlement.company },
-      dryRun,
-    );
+    const result = await updateIssue(guard.issue, validation.value, dryRun);
     return NextResponse.json({
       ok: true,
       issueNumber,

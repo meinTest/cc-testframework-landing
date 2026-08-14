@@ -39,8 +39,6 @@ export interface FeedbackContext {
   version?: string;
   platform?: string;
   osVersion?: string;
-  view?: string;
-  lastError?: string | null;
 }
 
 export interface CreateIssueInput {
@@ -65,6 +63,9 @@ export interface FeedbackReport {
   issueNumber: number;
   status: FeedbackStatus;
   statusReason: string | null;
+  // App version the report was FILED against (from the `version:<version>` label
+  // set at creation). null when the issue predates the label scheme.
+  foundVersion: string | null;
   // App version a feature/bug was shipped with (from a shipped:<version> label
   // or the issue's milestone). null when not yet shipped.
   deliveredVersion: string | null;
@@ -76,8 +77,6 @@ export interface UpdateIssueInput {
   title: string;
   description: string;
   repro?: string;
-  // Server-derived from the license.
-  company: string;
 }
 
 // A report that has passed the ownership + "received" guard and may be edited.
@@ -97,8 +96,7 @@ export async function createIssue(
   input: CreateIssueInput,
   dryRun: boolean,
 ): Promise<CreatedIssue> {
-  const contextBlock = buildContextBlock(input.context, input.company);
-  const body = buildBody(input.description, input.repro, contextBlock);
+  const body = buildBody(input.description, input.repro);
   const labels = buildLabels(input);
 
   if (dryRun) {
@@ -134,6 +132,7 @@ export async function listCustomerIssues(
         issueNumber: 124,
         status: "done",
         statusReason: null,
+        foundVersion: "0.6.2",
         deliveredVersion: "0.6.6",
         updatedAt: new Date().toISOString(),
       },
@@ -141,6 +140,7 @@ export async function listCustomerIssues(
         issueNumber: 123,
         status: "in_progress",
         statusReason: null,
+        foundVersion: "0.29.0",
         deliveredVersion: null,
         updatedAt: new Date().toISOString(),
       },
@@ -148,6 +148,7 @@ export async function listCustomerIssues(
         issueNumber: 120,
         status: "rejected",
         statusReason: "Außerhalb des Scopes.",
+        foundVersion: null,
         deliveredVersion: null,
         updatedAt: new Date().toISOString(),
       },
@@ -178,6 +179,7 @@ export async function listCustomerIssues(
       issueNumber: issue.number,
       status,
       statusReason,
+      foundVersion: extractFoundVersion(issue),
       deliveredVersion: extractDeliveredVersion(issue),
       updatedAt: issue.updated_at,
     });
@@ -185,38 +187,13 @@ export async function listCustomerIssues(
   return reports;
 }
 
-const CONTEXT_HEADING = "## Automatisch erfasster Kontext";
-
-function buildContextBlock(ctx: FeedbackContext, company: string): string {
-  const c = ctx ?? {};
-  return [
-    CONTEXT_HEADING,
-    "",
-    `- App-Version: ${c.version ?? "—"}`,
-    `- Platform: ${c.platform ?? "—"}`,
-    `- OS: ${c.osVersion ?? "—"}`,
-    `- Ansicht: ${c.view ?? "—"}`,
-    `- Letzter Fehler: ${c.lastError ?? "—"}`,
-    `- Kunde: ${company || "—"}`,
-  ].join("\n");
-}
-
-function buildBody(
-  description: string,
-  repro: string | undefined,
-  contextBlock: string,
-): string {
-  const lines: string[] = ["## Beschreibung", "", description, ""];
-  if (repro) lines.push("## Reproduktionsschritte", "", repro, "");
-  lines.push(contextBlock);
+// The issue body carries only the customer's own text now. Telemetry
+// (version/platform/os) lives in structured labels, and the app appends its
+// own "## Robin-Kontext" / "## System-Log" sections into the description.
+function buildBody(description: string, repro: string | undefined): string {
+  const lines: string[] = ["## Beschreibung", "", description];
+  if (repro) lines.push("", "## Reproduktionsschritte", "", repro);
   return lines.join("\n");
-}
-
-// On edit the client never resends telemetry, so preserve the original context
-// section from the existing issue body.
-function extractContextBlock(body: string): string | null {
-  const i = body.indexOf(CONTEXT_HEADING);
-  return i >= 0 ? body.slice(i).trimEnd() : null;
 }
 
 /**
@@ -235,8 +212,8 @@ export async function loadEditableIssue(
       issue: {
         number: issueNumber,
         state: "open",
-        body: `## Beschreibung\n\nDry run\n\n${CONTEXT_HEADING}\n\n- App-Version: 0.6.2\n- Kunde: DryRun Co`,
-        labels: [customerLabel(licenseId), "type:bug"],
+        body: `## Beschreibung\n\nDry run`,
+        labels: [customerLabel(licenseId), "type:bug", "version:0.6.2"],
         updatedAt: new Date().toISOString(),
       },
     };
@@ -287,10 +264,10 @@ export async function updateIssue(
   input: UpdateIssueInput,
   dryRun: boolean,
 ): Promise<{ updatedAt: string }> {
-  const contextBlock =
-    extractContextBlock(issue.body) ?? buildContextBlock({}, input.company);
-  const body = buildBody(input.description, input.repro, contextBlock);
-  // Swap the type:* label, keep customer/company/source and anything else.
+  const body = buildBody(input.description, input.repro);
+  // Swap the type:* label; keep everything else (customer/company/source and the
+  // version/platform/os telemetry labels — the client never resends telemetry on
+  // edit, so the labels set at creation are preserved as-is).
   const labels = issue.labels
     .filter((l) => !l.startsWith("type:"))
     .concat(`type:${input.type}`);
@@ -342,6 +319,11 @@ function buildLabels(input: CreateIssueInput): string[] {
   const labels = [`type:${input.type}`, customerLabel(input.licenseId)];
   if (input.company) labels.push(`company:${companyLabel(input.company)}`);
   if (input.source === "copilot") labels.push("source:copilot");
+  // Structured, filterable telemetry (replaces the old free-text body block).
+  const c = input.context ?? {};
+  if (c.version) labels.push(`version:${labelValue(c.version)}`);
+  if (c.platform) labels.push(`platform:${labelValue(c.platform)}`);
+  if (c.osVersion) labels.push(`os:${labelValue(c.osVersion)}`);
   return labels;
 }
 
@@ -352,6 +334,12 @@ function customerLabel(licenseId: string): string {
 function companyLabel(name: string): string {
   // GitHub label names cap at 50 chars; "company:" already uses 8.
   return name.trim().slice(0, 40);
+}
+
+// Keep a telemetry label single-line and within GitHub's 50-char label cap
+// (longest prefix here is "platform:" at 9 chars, so 40 leaves headroom).
+function labelValue(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, 40);
 }
 
 interface IssueLike {
@@ -370,6 +358,15 @@ function labelNames(issue: {
 
 function isReceived(state: string, labels: string[]): boolean {
   return state === "open" && !labels.some((l) => NON_RECEIVED_LABELS.includes(l));
+}
+
+// Version the report was filed against, from the `version:<version>` label set
+// at creation. null for issues that predate the label scheme.
+function extractFoundVersion(issue: {
+  labels: (string | { name?: string })[];
+}): string | null {
+  const found = labelNames(issue).find((l) => l.startsWith("version:"));
+  return found ? found.slice("version:".length).trim() || null : null;
 }
 
 // Delivered app version: a `shipped:<version>` label wins; otherwise the issue's

@@ -129,16 +129,12 @@ function validate(
     string,
     unknown
   >;
-  const lastErrorRaw = c.lastError;
+  // Only version/platform/os are kept (as labels). view/lastError are no longer
+  // tracked — extra fields in the payload are simply ignored.
   const context: FeedbackContext = {
     version: str(c.version) || undefined,
     platform: str(c.platform) || undefined,
     osVersion: str(c.osVersion) || undefined,
-    view: str(c.view) || undefined,
-    lastError:
-      lastErrorRaw === null || lastErrorRaw === undefined
-        ? null
-        : cap(str(lastErrorRaw), 2000) || null,
   };
 
   return {
