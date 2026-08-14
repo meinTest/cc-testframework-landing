@@ -4,8 +4,14 @@ import { octokit, repoCoords } from "./issues";
 // Server-side handling for user-attached feedback screenshots. The client sends
 // them inline as PNG/JPEG/WebP data-URLs in the POST payload; GitHub renders no
 // `data:` URIs and the client holds no GitHub token, so the proxy must upload
-// each image with its server-side App token and hand back a public raw URL that
-// issues.ts embeds into the issue body.
+// each image with its server-side App token and hand back a github.com blob-view
+// URL that issues.ts links from the issue body.
+//
+// The link uses the github.com/<owner>/<repo>/blob/<branch>/<path> domain, NOT
+// raw.githubusercontent.com: for a PRIVATE repo the raw domain 404s even for
+// logged-in collaborators (it doesn't share the github.com session cookie),
+// whereas the blob view authenticates the session and opens for repo members
+// (outsiders still get 404 — confidentiality preserved). See Issue #5.
 //
 // Everything here degrades gracefully: invalid/oversized images are dropped and
 // an upload failure (e.g. the App lacking Contents:write) skips that image — the
@@ -54,9 +60,9 @@ export function parseImages(raw: unknown): ParsedImage[] {
 }
 
 /**
- * Upload each image to the feedback repo and return its public raw URL, in the
- * same order. Individual upload failures are logged and skipped (that image is
- * omitted); the batch never throws for a single failed image.
+ * Upload each image to the feedback repo and return its github.com blob-view URL,
+ * in the same order. Individual upload failures are logged and skipped (that
+ * image is omitted); the batch never throws for a single failed image.
  */
 export async function uploadImages(
   images: ParsedImage[],
@@ -72,7 +78,7 @@ export async function uploadImages(
     console.log(`${LOG_PREFIX} DRY_RUN — would upload ${images.length} image(s) to ${folder}/`);
     return images.map(
       (img, i) =>
-        `https://raw.githubusercontent.com/DRYRUN/DRYRUN/${branch}/feedback-assets/${folder}/${i + 1}.${img.ext}`,
+        `https://github.com/DRYRUN/DRYRUN/blob/${branch}/feedback-assets/${folder}/${i + 1}.${img.ext}`,
     );
   }
 
@@ -92,7 +98,7 @@ export async function uploadImages(
         message: `chore(feedback): screenshot ${i + 1} (${folder})`,
         content: img.buffer.toString("base64"),
       });
-      urls.push(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`);
+      urls.push(`https://github.com/${owner}/${repo}/blob/${branch}/${path}`);
     } catch (err) {
       // Most likely cause: the GitHub App lacks Contents:write on the repo.
       console.error(`${LOG_PREFIX} upload failed for ${path} — skipping`, err);

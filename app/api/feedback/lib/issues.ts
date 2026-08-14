@@ -48,8 +48,8 @@ export interface CreateIssueInput {
   repro?: string;
   source: FeedbackSource;
   context: FeedbackContext;
-  // Public raw URLs of screenshots already uploaded to GitHub (see screenshots.ts).
-  // Embedded verbatim into a `## Screenshots` body section. Empty when none.
+  // github.com blob-view URLs of screenshots already uploaded to GitHub (see
+  // screenshots.ts). Linked from a `## Screenshots` body section. Empty when none.
   imageUrls?: string[];
   // Server-derived from the license — never from the client.
   company: string;
@@ -214,11 +214,18 @@ function buildBody(
   return lines.join("\n");
 }
 
-// Markdown section embedding each already-uploaded screenshot. null when none.
+// Markdown section for the already-uploaded screenshots. Uses plain clickable
+// links (NOT ![]() image embeds) over the github.com blob domain: for a private
+// repo an embed of a blob/raw URL renders as a broken image (camo can't load
+// private content), whereas a link opens the image reliably for repo members.
+// See Issue #5. null when none.
 function buildScreenshotsSection(imageUrls: string[]): string | null {
   if (imageUrls.length === 0) return null;
-  const refs = imageUrls.map((url, i) => `![screenshot-${i + 1}](${url})`);
-  return [SCREENSHOTS_HEADING, "", ...refs].join("\n");
+  const items = imageUrls.map((url, i) => {
+    const ext = url.split("?")[0].split(".").pop() || "png";
+    return `- [screenshot-${i + 1}.${ext}](${url})`;
+  });
+  return [SCREENSHOTS_HEADING, "", ...items].join("\n");
 }
 
 // On edit the client sends no images, so preserve the existing screenshots
