@@ -80,6 +80,10 @@ export interface UpdateIssueInput {
   title: string;
   description: string;
   repro?: string;
+  // Screenshots on edit — the client sends its FULL current set, so this replaces:
+  //   undefined     → no `images` field was sent → keep the existing section as-is
+  //   string[] (≥0) → rebuild the section from these URLs ([] removes it entirely)
+  imageUrls?: string[];
 }
 
 // A report that has passed the ownership + "received" guard and may be edited.
@@ -306,12 +310,13 @@ export async function updateIssue(
   input: UpdateIssueInput,
   dryRun: boolean,
 ): Promise<{ updatedAt: string }> {
-  // No `images` on edit ⇒ keep the screenshots already in the issue untouched.
-  const body = buildBody(
-    input.description,
-    input.repro,
-    extractScreenshotsSection(issue.body),
-  );
+  // Screenshots: rebuild the section when the client sent a set (undefined ⇒ no
+  // `images` field ⇒ keep the existing section untouched; [] ⇒ remove it).
+  const screenshotsSection =
+    input.imageUrls === undefined
+      ? extractScreenshotsSection(issue.body)
+      : buildScreenshotsSection(input.imageUrls);
+  const body = buildBody(input.description, input.repro, screenshotsSection);
   // Swap the type:* label; keep everything else (customer/company/source and the
   // version/platform/os telemetry labels — the client never resends telemetry on
   // edit, so the labels set at creation are preserved as-is).

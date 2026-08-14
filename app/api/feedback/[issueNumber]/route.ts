@@ -6,6 +6,7 @@ import {
   withdrawIssue,
   type FeedbackType,
 } from "../lib/issues";
+import { parseImages, uploadImages } from "../lib/screenshots";
 
 // Edit / withdraw a customer's own feedback report — allowed ONLY while the
 // report is still in the `received` state. Ownership and state are enforced
@@ -62,8 +63,39 @@ export async function PATCH(request: Request, { params }: Params) {
     );
   }
 
+  // Screenshots on edit: the client sends the FULL current set as `images`.
+  // Field absent ⇒ undefined ⇒ keep existing. Present (incl. []) ⇒ rebuild.
+  // Only handled once ownership + `received` state are confirmed (guard above).
+  const rawImages =
+    typeof payload === "object" && payload !== null
+      ? (payload as Record<string, unknown>).images
+      : undefined;
+  let imageUrls: string[] | undefined;
+  if (Array.isArray(rawImages)) {
+    if (rawImages.length === 0) {
+      imageUrls = []; // explicit clear → remove the section
+    } else {
+      try {
+        const uploaded = await uploadImages(parseImages(rawImages), dryRun);
+        // Only rebuild if at least one image made it — otherwise keep the
+        // existing section rather than wiping it on an all-invalid/failed edit.
+        imageUrls = uploaded.length > 0 ? uploaded : undefined;
+      } catch (err) {
+        console.error(
+          `${LOG_PREFIX} screenshot upload failed on edit (non-fatal, keeping existing)`,
+          err,
+        );
+        imageUrls = undefined;
+      }
+    }
+  }
+
   try {
-    const result = await updateIssue(guard.issue, validation.value, dryRun);
+    const result = await updateIssue(
+      guard.issue,
+      { ...validation.value, imageUrls },
+      dryRun,
+    );
     return NextResponse.json({
       ok: true,
       issueNumber,
