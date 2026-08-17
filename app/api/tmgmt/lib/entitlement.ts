@@ -12,6 +12,11 @@ const PRODUCT: ProductId = "cc-tmgmt";
 // license (which pulls the framework as a dependency).
 const DEFAULT_ALLOWED: readonly ProductId[] = [PRODUCT];
 
+// Entitlement gate for the framework npm broker — a valid license for EITHER
+// product may install @meintest/cc-testframework. Shared so the npm route and
+// the /license/status "entitled" verdict can never diverge (Issue #8).
+export const NPM_ALLOWED_PRODUCTS: readonly ProductId[] = ["cc-testframework", "cc-tmgmt"];
+
 export type EntitlementResult =
   | { ok: true; licenseId: string; company: string }
   | { ok: false; status: number; reason: string };
@@ -213,6 +218,93 @@ export async function describeLicense(
   }
   // NOT_FOUND / missing / any other → treat as an unresolvable/invalid key.
   return { ok: false, status: 401, reason: "invalid", message: "Invalid license key" };
+}
+
+// Combined verdict for /license/status: one keygen validate-key call yielding
+// BOTH the raw keygen validity AND the npm-broker entitlement, so the TMT client
+// has a single source of truth (Issue #8). `valid` mirrors what the client used
+// to ask keygen directly; `entitled` mirrors what the npm broker enforces.
+export interface LicenseStatusMeta {
+  product: string | null;
+  company: string | null;
+  customerName: string | null;
+  expiry: string | null;
+}
+
+export type LicenseStatusResult =
+  | { kind: "ok"; valid: boolean; entitled: boolean; code: string; meta: LicenseStatusMeta }
+  | { kind: "missing" }
+  | { kind: "unavailable" };
+
+export async function licenseStatus(
+  licenseKey: string,
+  dryRun: boolean,
+): Promise<LicenseStatusResult> {
+  if (!licenseKey) return { kind: "missing" };
+
+  if (dryRun) {
+    return {
+      kind: "ok",
+      valid: true,
+      entitled: true,
+      code: "VALID",
+      meta: {
+        product: PRODUCT,
+        company: "DryRun Co",
+        customerName: "Dry Run Tester",
+        expiry: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    };
+  }
+
+  const accountId = required("KEYGEN_ACCOUNT_ID");
+
+  let body: KeygenValidation;
+  try {
+    const response = await fetch(
+      `https://api.keygen.sh/v1/accounts/${accountId}/licenses/actions/validate-key`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/vnd.api+json",
+          Accept: "application/vnd.api+json",
+        },
+        body: JSON.stringify({ meta: { key: licenseKey } }),
+      },
+    );
+    if (!response.ok && response.status !== 200) {
+      console.error(`${LOG_PREFIX} Keygen validate-key HTTP ${response.status}`);
+      return { kind: "unavailable" };
+    }
+    body = (await response.json()) as KeygenValidation;
+  } catch (err) {
+    console.error(`${LOG_PREFIX} Keygen validate-key request failed`, err);
+    return { kind: "unavailable" };
+  }
+
+  const valid = body?.meta?.valid === true;
+  const code = body?.meta?.code ?? (valid ? "VALID" : "INVALID");
+  const metadata = body?.data?.attributes?.metadata ?? {};
+  const product = typeof metadata.product === "string" ? metadata.product : null;
+  // Same rule as the npm broker: valid AND product ∈ NPM_ALLOWED_PRODUCTS.
+  const entitled =
+    valid && product !== null && NPM_ALLOWED_PRODUCTS.includes(product as ProductId);
+
+  return {
+    kind: "ok",
+    valid,
+    entitled,
+    code,
+    meta: {
+      product,
+      company: typeof metadata.company === "string" ? metadata.company : null,
+      customerName: typeof metadata.customerName === "string" ? metadata.customerName : null,
+      expiry:
+        typeof body?.data?.attributes?.expiry === "string"
+          ? body.data.attributes.expiry
+          : null,
+    },
+  };
 }
 
 /**

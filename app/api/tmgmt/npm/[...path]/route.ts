@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { checkEntitlementCached, licenseKeyFromRequest } from "../../lib/entitlement";
+import {
+  checkEntitlementCached,
+  licenseKeyFromRequest,
+  NPM_ALLOWED_PRODUCTS,
+} from "../../lib/entitlement";
 import { rateLimit } from "../../lib/rate-limit";
 import {
   getProxiedPackument,
@@ -27,10 +31,12 @@ export async function GET(request: Request) {
 
   // The @meintest/cc-testframework package is served to both a standalone
   // framework license and a cc-tmgmt license (which depends on the framework).
-  const entitlement = await checkEntitlementCached(licenseKeyFromRequest(request), dryRun, [
-    "cc-testframework",
-    "cc-tmgmt",
-  ]);
+  // Same product set drives /license/status "entitled" (Issue #8).
+  const entitlement = await checkEntitlementCached(
+    licenseKeyFromRequest(request),
+    dryRun,
+    NPM_ALLOWED_PRODUCTS,
+  );
   if (!entitlement.ok) {
     return npmError(entitlement.status, entitlement.reason);
   }
