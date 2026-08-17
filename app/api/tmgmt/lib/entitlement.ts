@@ -37,8 +37,10 @@ export type LicenseDescription =
  *
  * Uses Keygen's public `validate-key` action (no admin token needed — the key
  * itself is the credential). The license must validate as ACTIVE/valid and its
- * metadata.product must be one of `allowedProducts` (defaults to cc-tmgmt only;
- * the npm proxy passes both products).
+ * resolved product must be one of `allowedProducts` (defaults to cc-tmgmt only;
+ * the npm proxy passes both products). The product is resolved from the license
+ * metadata AND its policy (see resolveProductId), so a license created straight
+ * off a product policy — with no metadata.product — is still recognized.
  *
  * In DRY_RUN any non-empty key is accepted (so the proxy can be smoke-tested
  * without hitting Keygen), but a missing key is still rejected.
@@ -59,38 +61,16 @@ export async function checkEntitlement(
     return { ok: true, licenseId: "dry-run-license-id", company: "DryRun Co" };
   }
 
-  const accountId = required("KEYGEN_ACCOUNT_ID");
-
-  let body: KeygenValidation;
-  try {
-    const response = await fetch(
-      `https://api.keygen.sh/v1/accounts/${accountId}/licenses/actions/validate-key`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/vnd.api+json",
-          Accept: "application/vnd.api+json",
-        },
-        body: JSON.stringify({ meta: { key: licenseKey } }),
-      },
-    );
-    if (!response.ok && response.status !== 200) {
-      console.error(`${LOG_PREFIX} Keygen validate-key HTTP ${response.status}`);
-      return { ok: false, status: 502, reason: "License validation unavailable" };
-    }
-    body = (await response.json()) as KeygenValidation;
-  } catch (err) {
-    console.error(`${LOG_PREFIX} Keygen validate-key request failed`, err);
-    return { ok: false, status: 502, reason: "License validation unavailable" };
-  }
+  const body = await validateKey(licenseKey);
+  if (!body) return { ok: false, status: 502, reason: "License validation unavailable" };
 
   const valid = body?.meta?.valid === true;
   if (!valid) {
     return { ok: false, status: 403, reason: body?.meta?.code ?? "License not valid" };
   }
 
-  const product = body?.data?.attributes?.metadata?.product;
-  if (!allowedProducts.includes(product as ProductId)) {
+  const product = resolveProductId(body);
+  if (product === null || !allowedProducts.includes(product)) {
     return {
       ok: false,
       status: 403,
@@ -99,11 +79,8 @@ export async function checkEntitlement(
   }
 
   const licenseId = body?.data?.id ?? "";
-  const company =
-    typeof body?.data?.attributes?.metadata?.company === "string"
-      ? body.data.attributes.metadata.company
-      : "";
-  console.log(`${LOG_PREFIX} entitled license ${licenseId} (key ${mask(licenseKey)})`);
+  const company = asString(body?.data?.attributes?.metadata?.company);
+  console.log(`${LOG_PREFIX} entitled license ${licenseId} as ${product} (key ${mask(licenseKey)})`);
   return { ok: true, licenseId, company };
 }
 
@@ -158,43 +135,20 @@ export async function describeLicense(
     };
   }
 
-  const accountId = required("KEYGEN_ACCOUNT_ID");
-
-  let body: KeygenValidation;
-  try {
-    const response = await fetch(
-      `https://api.keygen.sh/v1/accounts/${accountId}/licenses/actions/validate-key`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/vnd.api+json",
-          Accept: "application/vnd.api+json",
-        },
-        body: JSON.stringify({ meta: { key: licenseKey } }),
-      },
-    );
-    if (!response.ok && response.status !== 200) {
-      console.error(`${LOG_PREFIX} Keygen validate-key HTTP ${response.status}`);
-      return { ok: false, status: 502, message: "License validation unavailable" };
-    }
-    body = (await response.json()) as KeygenValidation;
-  } catch (err) {
-    console.error(`${LOG_PREFIX} Keygen validate-key request failed`, err);
-    return { ok: false, status: 502, message: "License validation unavailable" };
-  }
+  const body = await validateKey(licenseKey);
+  if (!body) return { ok: false, status: 502, message: "License validation unavailable" };
 
   const valid = body?.meta?.valid === true;
   const code = body?.meta?.code;
   const metadata = body?.data?.attributes?.metadata ?? {};
-  const product = metadata.product;
+  const product = resolveProductId(body);
 
   if (valid && product === PRODUCT) {
     return {
       ok: true,
       licenseId: body?.data?.id ?? "",
-      company: typeof metadata.company === "string" ? metadata.company : "",
-      customerName:
-        typeof metadata.customerName === "string" ? metadata.customerName : "",
+      company: asString(metadata.company),
+      customerName: asString(metadata.customerName),
       expiresAt:
         typeof body?.data?.attributes?.expiry === "string"
           ? body.data.attributes.expiry
@@ -257,38 +211,15 @@ export async function licenseStatus(
     };
   }
 
-  const accountId = required("KEYGEN_ACCOUNT_ID");
-
-  let body: KeygenValidation;
-  try {
-    const response = await fetch(
-      `https://api.keygen.sh/v1/accounts/${accountId}/licenses/actions/validate-key`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/vnd.api+json",
-          Accept: "application/vnd.api+json",
-        },
-        body: JSON.stringify({ meta: { key: licenseKey } }),
-      },
-    );
-    if (!response.ok && response.status !== 200) {
-      console.error(`${LOG_PREFIX} Keygen validate-key HTTP ${response.status}`);
-      return { kind: "unavailable" };
-    }
-    body = (await response.json()) as KeygenValidation;
-  } catch (err) {
-    console.error(`${LOG_PREFIX} Keygen validate-key request failed`, err);
-    return { kind: "unavailable" };
-  }
+  const body = await validateKey(licenseKey);
+  if (!body) return { kind: "unavailable" };
 
   const valid = body?.meta?.valid === true;
   const code = body?.meta?.code ?? (valid ? "VALID" : "INVALID");
   const metadata = body?.data?.attributes?.metadata ?? {};
-  const product = typeof metadata.product === "string" ? metadata.product : null;
+  const product = resolveProductId(body);
   // Same rule as the npm broker: valid AND product ∈ NPM_ALLOWED_PRODUCTS.
-  const entitled =
-    valid && product !== null && NPM_ALLOWED_PRODUCTS.includes(product as ProductId);
+  const entitled = valid && product !== null && NPM_ALLOWED_PRODUCTS.includes(product);
 
   return {
     kind: "ok",
@@ -297,8 +228,8 @@ export async function licenseStatus(
     code,
     meta: {
       product,
-      company: typeof metadata.company === "string" ? metadata.company : null,
-      customerName: typeof metadata.customerName === "string" ? metadata.customerName : null,
+      company: asString(metadata.company) || null,
+      customerName: asString(metadata.customerName) || null,
       expiry:
         typeof body?.data?.attributes?.expiry === "string"
           ? body.data.attributes.expiry
@@ -323,6 +254,92 @@ export function licenseKeyFromRequest(request: Request): string {
   }
 }
 
+// --- Keygen validate-key + product resolution ---------------------------------
+
+// One shared validate-key call for every entitlement check, so the three call
+// sites can't drift. `?include=policy` sideloads the policy so we can resolve the
+// license's product from it (name) when the license carries no metadata.product.
+// Returns null on any transient upstream failure (callers map that to 502).
+async function validateKey(licenseKey: string): Promise<KeygenValidation | null> {
+  const accountId = required("KEYGEN_ACCOUNT_ID");
+  try {
+    const response = await fetch(
+      `https://api.keygen.sh/v1/accounts/${accountId}/licenses/actions/validate-key?include=policy`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/vnd.api+json",
+          Accept: "application/vnd.api+json",
+        },
+        body: JSON.stringify({ meta: { key: licenseKey } }),
+      },
+    );
+    if (!response.ok && response.status !== 200) {
+      console.error(`${LOG_PREFIX} Keygen validate-key HTTP ${response.status}`);
+      return null;
+    }
+    return (await response.json()) as KeygenValidation;
+  } catch (err) {
+    console.error(`${LOG_PREFIX} Keygen validate-key request failed`, err);
+    return null;
+  }
+}
+
+/**
+ * Resolve the license's ProductId (or null) from, in order:
+ *   0. the policy — a pending-signup-token policy is NEVER entitled (returns null
+ *      regardless of metadata/name), so a signup token can't install anything;
+ *   1. explicit license metadata.product (set by our own signup flow);
+ *   2. the license's policy id matched against the configured per-product env
+ *      policies (trial/paid);
+ *   3. the policy name convention (cc-testframework-* / cc-tmgmt-*), which covers
+ *      licenses created straight off a product policy with no metadata (Issue #9).
+ * Returns null when the product cannot be determined → treated as not entitled.
+ */
+function resolveProductId(body: KeygenValidation): ProductId | null {
+  const policy = extractPolicy(body);
+
+  const pendingId = process.env.KEYGEN_PENDING_POLICY_ID;
+  if (policy.id && pendingId && policy.id === pendingId) return null;
+
+  const fromMeta = asProductId(body?.data?.attributes?.metadata?.product);
+  if (fromMeta) return fromMeta;
+
+  const fromPolicyId = productFromPolicyId(policy.id);
+  if (fromPolicyId) return fromPolicyId;
+
+  const name = (policy.name ?? "").toLowerCase();
+  if (name.includes("cc-tmgmt")) return "cc-tmgmt";
+  if (name.includes("cc-testframework")) return "cc-testframework";
+
+  return null;
+}
+
+function extractPolicy(body: KeygenValidation): { id: string | null; name: string | null } {
+  const id = body?.data?.relationships?.policy?.data?.id ?? null;
+  let name: string | null = null;
+  if (id && Array.isArray(body.included)) {
+    const p = body.included.find((x) => x?.type === "policies" && x.id === id);
+    if (p && typeof p.attributes?.name === "string") name = p.attributes.name;
+  }
+  return { id, name };
+}
+
+// Map a policy id to a product via the configured env policies. The pending
+// policy is intentionally absent (handled earlier as never-entitled).
+function productFromPolicyId(policyId: string | null): ProductId | null {
+  if (!policyId) return null;
+  const framework = [process.env.KEYGEN_TRIAL_POLICY_ID, process.env.KEYGEN_PAID_POLICY_ID];
+  const tmgmt = [process.env.KEYGEN_TMGMT_TRIAL_POLICY_ID, process.env.KEYGEN_TMGMT_PAID_POLICY_ID];
+  if (framework.includes(policyId)) return "cc-testframework";
+  if (tmgmt.includes(policyId)) return "cc-tmgmt";
+  return null;
+}
+
+function asProductId(value: unknown): ProductId | null {
+  return value === "cc-tmgmt" || value === "cc-testframework" ? value : null;
+}
+
 interface KeygenValidation {
   meta?: { valid?: boolean; code?: string; detail?: string };
   data?: {
@@ -332,7 +349,17 @@ interface KeygenValidation {
       expiry?: string | null;
       metadata?: Record<string, unknown>;
     };
+    relationships?: { policy?: { data?: { id?: string; type?: string } | null } };
   };
+  included?: Array<{
+    type?: string;
+    id?: string;
+    attributes?: { name?: string } & Record<string, unknown>;
+  }>;
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function mask(key: string): string {
