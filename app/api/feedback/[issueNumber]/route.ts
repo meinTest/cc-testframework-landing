@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { checkEntitlement, licenseKeyFromRequest } from "../../tmgmt/lib/entitlement";
+import {
+  checkEntitlement,
+  licenseKeyFromRequest,
+  ENTITLED_PRODUCTS,
+} from "../../tmgmt/lib/entitlement";
 import {
   loadEditableIssue,
   updateIssue,
@@ -22,7 +26,11 @@ type Params = { params: Promise<{ issueNumber: string }> };
 export async function PATCH(request: Request, { params }: Params) {
   const dryRun = process.env.DRY_RUN === "true";
 
-  const entitlement = await checkEntitlement(licenseKeyFromRequest(request), dryRun);
+  const entitlement = await checkEntitlement(
+    licenseKeyFromRequest(request),
+    dryRun,
+    ENTITLED_PRODUCTS,
+  );
   if (!entitlement.ok) {
     return NextResponse.json(
       { ok: false, message: entitlement.reason },
@@ -118,7 +126,11 @@ export async function PATCH(request: Request, { params }: Params) {
 export async function DELETE(request: Request, { params }: Params) {
   const dryRun = process.env.DRY_RUN === "true";
 
-  const entitlement = await checkEntitlement(licenseKeyFromRequest(request), dryRun);
+  const entitlement = await checkEntitlement(
+    licenseKeyFromRequest(request),
+    dryRun,
+    ENTITLED_PRODUCTS,
+  );
   if (!entitlement.ok) {
     return NextResponse.json(
       { ok: false, message: entitlement.reason },

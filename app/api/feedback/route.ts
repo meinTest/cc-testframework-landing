@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { checkEntitlement, licenseKeyFromRequest } from "../tmgmt/lib/entitlement";
+import {
+  checkEntitlement,
+  licenseKeyFromRequest,
+  ENTITLED_PRODUCTS,
+} from "../tmgmt/lib/entitlement";
 import {
   createIssue,
   listCustomerIssues,
@@ -23,7 +27,13 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const dryRun = process.env.DRY_RUN === "true";
 
-  const entitlement = await checkEntitlement(licenseKeyFromRequest(request), dryRun);
+  // Feedback is a cross-product feature: any valid license (framework or tmgmt)
+  // may use it — same gate as /license/status and the npm broker (Issue #10).
+  const entitlement = await checkEntitlement(
+    licenseKeyFromRequest(request),
+    dryRun,
+    ENTITLED_PRODUCTS,
+  );
   if (!entitlement.ok) {
     return NextResponse.json(
       { ok: false, message: entitlement.reason },
@@ -96,7 +106,13 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const dryRun = process.env.DRY_RUN === "true";
 
-  const entitlement = await checkEntitlement(licenseKeyFromRequest(request), dryRun);
+  // Feedback is a cross-product feature: any valid license (framework or tmgmt)
+  // may use it — same gate as /license/status and the npm broker (Issue #10).
+  const entitlement = await checkEntitlement(
+    licenseKeyFromRequest(request),
+    dryRun,
+    ENTITLED_PRODUCTS,
+  );
   if (!entitlement.ok) {
     return NextResponse.json(
       { ok: false, message: entitlement.reason },

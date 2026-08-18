@@ -12,10 +12,12 @@ const PRODUCT: ProductId = "cc-tmgmt";
 // license (which pulls the framework as a dependency).
 const DEFAULT_ALLOWED: readonly ProductId[] = [PRODUCT];
 
-// Entitlement gate for the framework npm broker — a valid license for EITHER
-// product may install @meintest/cc-testframework. Shared so the npm route and
-// the /license/status "entitled" verdict can never diverge (Issue #8).
-export const NPM_ALLOWED_PRODUCTS: readonly ProductId[] = ["cc-testframework", "cc-tmgmt"];
+// Shared entitlement gate for the cross-product proxy services: a valid license
+// for EITHER product qualifies. Used by the npm broker (install
+// @meintest/cc-testframework), the /license/status "entitled" verdict (Issue #8),
+// and the feedback endpoints (Issue #10) — one constant so these can never
+// diverge. (The cc-tmgmt-only resources download/updates keep DEFAULT_ALLOWED.)
+export const ENTITLED_PRODUCTS: readonly ProductId[] = ["cc-testframework", "cc-tmgmt"];
 
 export type EntitlementResult =
   | { ok: true; licenseId: string; company: string }
@@ -218,8 +220,8 @@ export async function licenseStatus(
   const code = body?.meta?.code ?? (valid ? "VALID" : "INVALID");
   const metadata = body?.data?.attributes?.metadata ?? {};
   const product = resolveProductId(body);
-  // Same rule as the npm broker: valid AND product ∈ NPM_ALLOWED_PRODUCTS.
-  const entitled = valid && product !== null && NPM_ALLOWED_PRODUCTS.includes(product);
+  // Same rule as the npm broker / feedback: valid AND product ∈ ENTITLED_PRODUCTS.
+  const entitled = valid && product !== null && ENTITLED_PRODUCTS.includes(product);
 
   return {
     kind: "ok",
