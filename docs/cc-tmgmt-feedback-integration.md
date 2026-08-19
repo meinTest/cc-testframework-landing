@@ -17,7 +17,7 @@ ohnehin ignoriert und serverseitig gesetzt.
 
 ## Basis-URL
 ```
-https://cc-testframework-landing.vercel.app/api/feedback
+https://itsbusiness.vercel.app/api/feedback
 ```
 
 ---
@@ -49,7 +49,7 @@ https://cc-testframework-landing.vercel.app/api/feedback
 
 **Beispiel (Client):**
 ```js
-const res = await fetch("https://cc-testframework-landing.vercel.app/api/feedback", {
+const res = await fetch("https://itsbusiness.vercel.app/api/feedback", {
   method: "POST",
   headers: { "Content-Type": "application/json", Authorization: `Bearer ${licenseKey}` },
   body: JSON.stringify({ type, title, description, repro, source, context }),

@@ -10,7 +10,7 @@
 Die App (Electron) nutzt **`electron-updater` mit dem `generic`-Provider**. Provider-Basis-URL:
 
 ```
-https://cc-testframework-landing.vercel.app/api/tmgmt/updates/
+https://itsbusiness.vercel.app/api/tmgmt/updates/
 ```
 
 > Diese URL wird in die ausgelieferte App **eingebacken** und ist die **dauerhafte** Update-URL
@@ -43,7 +43,7 @@ yml/Release aufgelöst; neue Versionen/Architekturen funktionieren automatisch.
 
 ### Erst-Download (für die Onboarding-Mail / manueller Download)
 ```
-https://cc-testframework-landing.vercel.app/api/tmgmt/download?os=win|mac|linux&key=<lizenzschlüssel>
+https://itsbusiness.vercel.app/api/tmgmt/download?os=win|mac|linux&key=<lizenzschlüssel>
 ```
 Lizenz-gated, löst das aktuelle Installable für das OS zum Klick-Zeitpunkt auf und 302-redirected
 auf die GitHub-Asset-URL. (Hier der Key als `?key=`, weil Browser-/Mail-Links keinen Header setzen
@@ -51,7 +51,7 @@ können.)
 
 ### Lizenz-Status (First-Run-Onboarding + Settings → Lizenz)
 ```
-GET https://cc-testframework-landing.vercel.app/api/tmgmt/license
+GET https://itsbusiness.vercel.app/api/tmgmt/license
 Authorization: Bearer <keygen-lizenzschlüssel>
 ```
 Der Update-Feed validiert zwar (200/401/403), liefert aber **kein Ablaufdatum** — dafür dieser
