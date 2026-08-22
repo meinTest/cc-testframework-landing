@@ -14,10 +14,10 @@ export default function CheckoutSuccessPage() {
         <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">
           Fragen? Schreib uns an{" "}
           <a
-            href="mailto:support@meinTest.software"
+            href="mailto:support@itsbusiness.ch"
             className="underline hover:text-slate-700 dark:hover:text-slate-200"
           >
-            support@meinTest.software
+            support@itsbusiness.ch
           </a>
           .
         </p>

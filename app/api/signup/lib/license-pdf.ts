@@ -8,7 +8,7 @@ import { LICENSE_LOGO_PNG_BASE64 } from "./license-logo";
 const BRAND = rgb(0.596, 0.757, 0.169); // #98c12b
 const INK = rgb(0.173, 0.173, 0.173);
 const MUTED = rgb(0.45, 0.45, 0.45);
-const SUPPORT_EMAIL = "support@meinTest.software";
+const SUPPORT_EMAIL = "support@itsbusiness.ch";
 
 const DE_MONTHS = [
   "Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -31,7 +31,7 @@ export async function buildLicensePdf(
 ): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   pdf.setTitle(`${input.productName} — License Certificate`);
-  pdf.setProducer("meinTest GmbH");
+  pdf.setProducer("itsbusiness AG");
 
   const page = pdf.addPage([595.28, 841.89]); // A4
   const { width, height } = page.getSize();
@@ -52,12 +52,12 @@ export async function buildLicensePdf(
   page.drawImage(logo, { x: margin, y: top - logoH, width: logoW, height: logoH });
 
   const address = [
-    "meinTest GmbH",
+    "itsbusiness AG",
     "Neuengasse 25",
     "3011 Bern",
     "SWITZERLAND",
-    "info@meinTest.software",
-    "www.meinTest.software",
+    "support@itsbusiness.ch",
+    "www.itsbusiness.ch",
   ];
   address.forEach((line, i) => {
     drawRight(page, line, right, top - 4 - i * 11, 8.5, regular, MUTED);
@@ -129,7 +129,7 @@ export async function buildLicensePdf(
     thickness: 0.75,
     color: rgb(0.85, 0.85, 0.85),
   });
-  page.drawText(`© meinTest GmbH | ${now.getFullYear()}`, {
+  page.drawText(`© itsbusiness AG | ${now.getFullYear()}`, {
     x: margin,
     y: 44,
     size: 8.5,

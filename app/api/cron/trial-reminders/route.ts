@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   }
 
   const dryRun = process.env.DRY_RUN === "true";
-  const salesEmail = process.env.RESEND_SUPPORT_TO ?? "sales@itsbusiness.ch";
+  const salesEmail = process.env.RESEND_SUPPORT_TO ?? "support@itsbusiness.ch";
 
   const summary = { checked: 0, eligible: 0, reminded: 0, failed: 0 };
 

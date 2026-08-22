@@ -88,7 +88,7 @@ export default async function ManagementPage({
           <p className="mt-12 text-sm text-slate-400 dark:text-slate-500">
             {t.common.alreadyCustomer}{" "}
             <a
-              href="mailto:sales@itsbusiness.ch"
+              href="mailto:support@itsbusiness.ch"
               className="underline hover:text-slate-600 dark:hover:text-slate-200"
             >
               {t.common.contactSales}

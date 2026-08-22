@@ -482,7 +482,7 @@ export async function sendSubscriptionKeys(
     <p>Your subscription renews on <strong>${renewsOn}</strong>; the keys stay valid as long as the subscription is active.</p>
     <hr>
     <p>Questions? Reach us at
-       <a href="mailto:support@meinTest.software">support@meinTest.software</a>.</p>
+       <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
   `;
   const text = [
     `Your ${input.productName} license keys`,
@@ -493,7 +493,7 @@ export async function sendSubscriptionKeys(
     ``,
     `Renews on ${renewsOn}; keys stay valid while the subscription is active.`,
     ``,
-    `Questions? support@meinTest.software`,
+    `Questions? support@itsbusiness.ch`,
   ].join("\n");
 
   const result = await resend.emails.send({
