@@ -1,11 +1,12 @@
+import { notFound } from "next/navigation";
 import SignupForm from "./SignupForm";
 import { findPendingLicenseByToken } from "../api/signup/lib/keygen";
-import { resolveProduct, DEFAULT_PRODUCT } from "../products";
+import { resolveProduct, isOffered, isVetted } from "../products";
 
 export const dynamic = "force-dynamic";
 
 interface SignupPageProps {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; product?: string }>;
 }
 
 export default async function SignupPage({ searchParams }: SignupPageProps) {
@@ -15,21 +16,22 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     return <Disclaimer />;
   }
 
-  const vetted = process.env.SALES_VETTED_MODE === "true";
+  const { token, product: productParam } = await searchParams;
 
-  if (!vetted) {
-    // Open signups are framework-only (no product context).
-    return <SignupForm token={null} product={DEFAULT_PRODUCT} />;
-  }
-
-  const { token } = await searchParams;
+  // No token → open self-serve path. Allowed only for a product whose vetting is
+  // OFF; the chosen product comes from ?product= (defaults to framework).
   if (!token) {
-    return (
-      <TokenError
-        title="Signup link required"
-        body="To start a trial, please request a demo first. Sales will send you a personalized signup link."
-      />
-    );
+    const product = resolveProduct(productParam);
+    if (!isOffered(product)) notFound();
+    if (isVetted(product)) {
+      return (
+        <TokenError
+          title="Signup link required"
+          body="To start a trial, please request a demo first. Sales will send you a personalized signup link."
+        />
+      );
+    }
+    return <SignupForm token={null} product={product} />;
   }
 
   const dryRun = process.env.DRY_RUN === "true";

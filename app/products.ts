@@ -49,3 +49,24 @@ export function offeredProducts(): ProductId[] {
 export function isOffered(product: ProductId): boolean {
   return offeredProducts().includes(product);
 }
+
+/**
+ * Whether the sales-vetted onboarding gate is active for a product. Server-side.
+ *
+ *   SALES_VETTED_MODE        → global default (and the framework's control)
+ *   SALES_VETTED_MODE_TMGMT  → per-product override for cc-tmgmt
+ *                              ("true"/"false"; unset → inherits the global)
+ *
+ * When vetting is OFF for a product, its trial is self-served directly at
+ * `/signup?product=<id>` (no demo-request / sales approval). When ON, `/signup`
+ * requires a sales-issued token and the CTA points at `/demo-request`.
+ */
+export function isVetted(product: ProductId): boolean {
+  const global = process.env.SALES_VETTED_MODE === "true";
+  if (product === "cc-tmgmt") {
+    const override = process.env.SALES_VETTED_MODE_TMGMT;
+    if (override === "true") return true;
+    if (override === "false") return false;
+  }
+  return global;
+}

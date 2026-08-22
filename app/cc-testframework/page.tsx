@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { content, resolveLang, withLang } from "../content";
-import { isOffered } from "../products";
+import { isOffered, isVetted } from "../products";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +19,9 @@ export default async function FrameworkPage({
   const t = content[lang];
   const p = t.framework;
 
-  const vetted = process.env.SALES_VETTED_MODE === "true";
-  const primaryCta = vetted
+  const primaryCta = isVetted("cc-testframework")
     ? { href: "/demo-request?product=cc-testframework", label: t.common.requestDemo }
-    : { href: "/signup", label: t.common.startTrial };
+    : { href: "/signup?product=cc-testframework", label: t.common.startTrial };
 
   return (
     <main className="flex-1 px-6 py-16 sm:py-24">

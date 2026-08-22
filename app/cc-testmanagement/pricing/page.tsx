@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import PricingSection from "../../PricingSection";
 import { content, resolveLang, withLang } from "../../content";
-import { isOffered, PRODUCT_LABELS } from "../../products";
+import { isOffered, isVetted, PRODUCT_LABELS } from "../../products";
 import { getDisplayPrices } from "../../lib/stripe-pricing";
 
 export const dynamic = "force-dynamic";
@@ -22,8 +22,10 @@ export default async function ManagementPricingPage({
   const lang = resolveLang(langParam);
   const t = content[lang];
 
-  // cc-tmgmt has no self-serve trial — the trial bucket routes to sales.
-  const trialHref = `/demo-request?product=${PRODUCT}`;
+  // Vetted → trial bucket routes to sales; open → self-serve /signup.
+  const trialHref = isVetted(PRODUCT)
+    ? `/demo-request?product=${PRODUCT}`
+    : `/signup?product=${PRODUCT}`;
   const prices = await getDisplayPrices(PRODUCT);
 
   return (

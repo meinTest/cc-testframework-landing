@@ -20,7 +20,7 @@ interface SignupFormProps {
   prefill?: Prefill;
 }
 
-export default function SignupForm({ token, prefill }: SignupFormProps) {
+export default function SignupForm({ token, product, prefill }: SignupFormProps) {
   const [state, setState] = useState<FormState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -37,6 +37,9 @@ export default function SignupForm({ token, prefill }: SignupFormProps) {
       email: prefill ? prefill.email : formData.get("email"),
       company: prefill ? prefill.company : formData.get("company"),
       token: formData.get("token") || undefined,
+      // Used only on the open (token-less) path; the server takes the product
+      // from the token when one is present.
+      product,
     };
 
     try {

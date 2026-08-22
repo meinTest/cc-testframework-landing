@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { content, resolveLang, withLang } from "../content";
-import { isOffered } from "../products";
+import { isOffered, isVetted } from "../products";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +18,10 @@ export default async function ManagementPage({
   const lang = resolveLang(langParam);
   const t = content[lang];
   const p = t.mgmt;
+
+  const primaryCta = isVetted("cc-tmgmt")
+    ? { href: "/demo-request?product=cc-tmgmt", label: t.common.requestDemo }
+    : { href: "/signup?product=cc-tmgmt", label: t.common.startTrial };
 
   return (
     <main className="flex-1 px-6 py-16 sm:py-24">
@@ -54,12 +58,12 @@ export default async function ManagementPage({
           </ul>
 
           <div className="mt-10 flex flex-col sm:flex-row gap-3">
-            {/* cc-tmgmt has no self-serve trial yet — sales-led demo only. */}
+            {/* Vetted → sales-led demo; open (SALES_VETTED_MODE_TMGMT=false) → self-serve trial. */}
             <Link
-              href="/demo-request?product=cc-tmgmt"
+              href={primaryCta.href}
               className="inline-flex items-center justify-center rounded-md bg-brand px-6 py-3 text-base font-semibold text-white hover:bg-brand-strong"
             >
-              {t.common.requestDemo}
+              {primaryCta.label}
             </Link>
             <span className="inline-flex items-center justify-center rounded-md border border-slate-200 px-6 py-3 text-base font-medium text-slate-400 dark:border-slate-800 dark:text-slate-500">
               {t.common.docsComingSoon}

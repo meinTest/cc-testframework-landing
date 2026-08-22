@@ -5,7 +5,7 @@ import {
   findPendingLicenseByToken,
 } from "./lib/keygen";
 import { sendWelcomeEmail, sendTmgmtWelcome, notifySupport } from "./lib/resend";
-import { resolveProduct, DEFAULT_PRODUCT, type ProductId } from "../../products";
+import { resolveProduct, isOffered, isVetted, type ProductId } from "../../products";
 
 const LOG_PREFIX = "[signup]";
 
@@ -14,6 +14,9 @@ interface SignupPayload {
   email?: unknown;
   company?: unknown;
   token?: unknown;
+  // Open (non-vetted) self-serve signups carry the chosen product here; vetted
+  // signups take the product from the token instead and ignore this.
+  product?: unknown;
 }
 
 interface ValidatedInput {
@@ -21,6 +24,7 @@ interface ValidatedInput {
   email: string;
   company: string;
   token: string;
+  product: ProductId;
 }
 
 export async function POST(request: Request) {
@@ -56,23 +60,13 @@ export async function POST(request: Request) {
   }
   const input = validation.value;
 
-  const vetted = process.env.SALES_VETTED_MODE === "true";
   let pendingLicenseId: string | null = null;
-  // Open signups have no product context and default to the framework; vetted
-  // signups inherit the product chosen at demo-request time (carried in the
-  // pending-license metadata).
-  let product: ProductId = DEFAULT_PRODUCT;
-  if (vetted) {
-    if (!input.token) {
-      return NextResponse.json(
-        {
-          ok: false,
-          message:
-            "Token required. Please request a demo at /demo-request to receive a personalized signup link.",
-        },
-        { status: 401 },
-      );
-    }
+  // A token is only ever issued by sales, so its presence always drives the
+  // vetted path (product comes from the token). Without a token we allow open
+  // self-serve — but only for a product whose vetting is OFF (per-product via
+  // isVetted); a vetted product still requires a demo-request token.
+  let product: ProductId;
+  if (input.token) {
     try {
       const pending = await findPendingLicenseByToken(input.token, dryRun);
       if (!pending) {
@@ -111,13 +105,31 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
+  } else {
+    product = input.product;
+    if (!isOffered(product)) {
+      return NextResponse.json(
+        { ok: false, message: "This product is not available." },
+        { status: 400 },
+      );
+    }
+    if (isVetted(product)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            "Token required. Please request a demo at /demo-request to receive a personalized signup link.",
+        },
+        { status: 401 },
+      );
+    }
   }
 
   console.log(`${LOG_PREFIX} received`, {
     email: input.email,
     company: input.company,
     product,
-    vetted,
+    vetted: isVetted(product),
     tokenPrefix: input.token ? `${input.token.slice(0, 8)}…` : null,
     dryRun,
     at: new Date().toISOString(),
@@ -224,7 +236,8 @@ export async function POST(request: Request) {
 
   console.log(`${LOG_PREFIX} completed`, {
     licenseId: license.id,
-    vetted,
+    product,
+    vetted: isVetted(product),
     dryRun,
   });
 
@@ -252,6 +265,9 @@ function validate(
   const email = stringField(payload.email);
   const company = stringField(payload.company);
   const token = stringField(payload.token);
+  // Resolved leniently (defaults to framework); only used on the open path, and
+  // there it is re-checked against isOffered/isVetted.
+  const product = resolveProduct(payload.product);
 
   if (!name) return { error: "Missing field: name" };
   if (!email) return { error: "Missing field: email" };
@@ -261,7 +277,7 @@ function validate(
     return { error: "Invalid email address" };
   }
 
-  return { value: { name, email, company, token } };
+  return { value: { name, email, company, token, product } };
 }
 
 function stringField(value: unknown): string {
