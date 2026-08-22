@@ -20,8 +20,14 @@ export default async function FrameworkPage({
   const p = t.framework;
 
   const primaryCta = isVetted("cc-testframework")
-    ? { href: "/demo-request?product=cc-testframework", label: t.common.requestDemo }
-    : { href: "/signup?product=cc-testframework", label: t.common.startTrial };
+    ? {
+        href: withLang("/demo-request?product=cc-testframework", lang),
+        label: t.common.requestDemo,
+      }
+    : {
+        href: withLang("/signup?product=cc-testframework", lang),
+        label: t.common.startTrial,
+      };
 
   return (
     <main className="flex-1 px-6 py-16 sm:py-24">

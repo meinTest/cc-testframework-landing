@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ProductId } from "../products";
+import type { SignupCopy } from "../content";
 
 type FormState = "idle" | "submitting" | "ok" | "error";
 
@@ -14,13 +15,19 @@ interface Prefill {
 interface SignupFormProps {
   token: string | null;
   product: ProductId;
+  copy: SignupCopy;
   // Present in the vetted flow: customer details already captured at demo-request
   // time (carried in the pending-license metadata). Shown read-only instead of
   // re-collected.
   prefill?: Prefill;
 }
 
-export default function SignupForm({ token, product, prefill }: SignupFormProps) {
+export default function SignupForm({
+  token,
+  product,
+  copy,
+  prefill,
+}: SignupFormProps) {
   const [state, setState] = useState<FormState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -48,15 +55,21 @@ export default function SignupForm({ token, product, prefill }: SignupFormProps)
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data?.message ?? "Signup failed");
+        console.error("[signup] failed:", data?.message);
+        setState("error");
+        setErrorMessage(copy.errorGeneric);
+        return;
       }
-      setSuccessMessage(data?.message ?? "Trial activated.");
+      setSuccessMessage(
+        product === "cc-tmgmt" ? copy.successTmgmt : copy.successFramework,
+      );
       setState("ok");
     } catch (err) {
+      console.error("[signup] request error", err);
       setState("error");
-      setErrorMessage(err instanceof Error ? err.message : "Unknown error");
+      setErrorMessage(copy.errorGeneric);
     }
   }
 
@@ -65,13 +78,13 @@ export default function SignupForm({ token, product, prefill }: SignupFormProps)
       <main className="flex-1 flex items-center justify-center px-6 py-24">
         <div className="max-w-md text-center">
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-            Thank you
+            {copy.thankYou}
           </h1>
           <p className="mt-4 text-base text-slate-600 dark:text-slate-300">
             {successMessage}
           </p>
           <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">
-            For questions reach out to{" "}
+            {copy.questionsReach}{" "}
             <a
               href="mailto:support@itsbusiness.ch"
               className="underline hover:text-slate-700 dark:hover:text-slate-200"
@@ -94,28 +107,28 @@ export default function SignupForm({ token, product, prefill }: SignupFormProps)
     <main className="flex-1 flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-md">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-          {oneClick ? "Activate your trial" : "Start your trial"}
+          {oneClick ? copy.activateHeading : copy.startHeading}
         </h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          14 days, full feature set, no payment information required.
+          {copy.subtitle}
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           {prefill ? (
-            <Summary prefill={prefill} />
+            <Summary prefill={prefill} label={copy.activatingFor} />
           ) : (
             <>
-              <Field name="name" label="Full name" required autoComplete="name" />
+              <Field name="name" label={copy.fullName} required autoComplete="name" />
               <Field
                 name="email"
-                label="Work email"
+                label={copy.workEmail}
                 type="email"
                 required
                 autoComplete="email"
               />
               <Field
                 name="company"
-                label="Company"
+                label={copy.company}
                 required
                 autoComplete="organization"
               />
@@ -130,10 +143,10 @@ export default function SignupForm({ token, product, prefill }: SignupFormProps)
             className="w-full rounded-md bg-brand px-4 py-2.5 text-base font-semibold text-white hover:bg-brand-strong disabled:opacity-50"
           >
             {state === "submitting"
-              ? "Submitting…"
+              ? copy.submitting
               : prefill
-                ? "Activate trial"
-                : "Request trial"}
+                ? copy.activateTrial
+                : copy.requestTrial}
           </button>
 
           {state === "error" && errorMessage && (
@@ -144,18 +157,18 @@ export default function SignupForm({ token, product, prefill }: SignupFormProps)
         </form>
 
         <p className="mt-8 text-xs text-slate-400 dark:text-slate-500">
-          By submitting you agree to be contacted regarding your trial.
+          {copy.consent}
         </p>
       </div>
     </main>
   );
 }
 
-function Summary({ prefill }: { prefill: Prefill }) {
+function Summary({ prefill, label }: { prefill: Prefill; label: string }) {
   return (
     <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-900">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-        Activating trial for
+        {label}
       </p>
       <p className="mt-1 font-medium text-slate-900 dark:text-white">
         {prefill.name}

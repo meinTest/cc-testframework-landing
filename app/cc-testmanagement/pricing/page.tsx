@@ -23,9 +23,12 @@ export default async function ManagementPricingPage({
   const t = content[lang];
 
   // Vetted → trial bucket routes to sales; open → self-serve /signup.
-  const trialHref = isVetted(PRODUCT)
-    ? `/demo-request?product=${PRODUCT}`
-    : `/signup?product=${PRODUCT}`;
+  const trialHref = withLang(
+    isVetted(PRODUCT)
+      ? `/demo-request?product=${PRODUCT}`
+      : `/signup?product=${PRODUCT}`,
+    lang,
+  );
   const prices = await getDisplayPrices(PRODUCT);
 
   return (

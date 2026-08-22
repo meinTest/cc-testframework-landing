@@ -64,6 +64,40 @@ export interface PricingCopy {
   };
 }
 
+export interface SignupCopy {
+  // form
+  startHeading: string;
+  activateHeading: string;
+  subtitle: string;
+  fullName: string;
+  workEmail: string;
+  company: string;
+  activatingFor: string;
+  requestTrial: string;
+  activateTrial: string;
+  submitting: string;
+  consent: string;
+  thankYou: string;
+  questionsReach: string;
+  successFramework: string;
+  successTmgmt: string;
+  errorGeneric: string;
+  // page states (disclaimer + token errors)
+  disabledTitle: string;
+  disabledBody: string;
+  linkRequiredTitle: string;
+  linkRequiredBody: string;
+  unavailableTitle: string;
+  unavailableBody: string;
+  invalidTitle: string;
+  invalidBody: string;
+  expiredTitle: string;
+  expiredBody: string;
+  requestDemoCta: string;
+  needHelp: string;
+  contactForQuestions: string;
+}
+
 type Copy = {
   htmlLang: string;
   nav: {
@@ -89,6 +123,7 @@ type Copy = {
   framework: ProductDetail;
   mgmt: ProductDetail;
   pricing: PricingCopy;
+  signup: SignupCopy;
 };
 
 export const content: Record<Lang, Copy> = {
@@ -192,6 +227,46 @@ export const content: Record<Lang, Copy> = {
         cta: "Angebot anfragen",
       },
     },
+    signup: {
+      startHeading: "Trial starten",
+      activateHeading: "Trial aktivieren",
+      subtitle: "14 Tage, voller Funktionsumfang, keine Zahlungsdaten nötig.",
+      fullName: "Vollständiger Name",
+      workEmail: "Geschäftliche E-Mail",
+      company: "Firma",
+      activatingFor: "Trial wird aktiviert für",
+      requestTrial: "Trial anfragen",
+      activateTrial: "Trial aktivieren",
+      submitting: "Wird gesendet…",
+      consent:
+        "Mit dem Absenden erklärst du dich einverstanden, bezüglich deines Trials kontaktiert zu werden.",
+      thankYou: "Danke",
+      questionsReach: "Bei Fragen wende dich an",
+      successFramework:
+        "Trial aktiviert. Prüfe deine E-Mails für deinen Lizenzschlüssel und die Einrichtungshinweise.",
+      successTmgmt:
+        "Trial aktiviert. Prüfe deine E-Mails für deine Download-Links und deinen Zugangscode.",
+      errorGeneric:
+        "Etwas ist schiefgelaufen. Bitte versuche es erneut oder kontaktiere support@itsbusiness.ch.",
+      disabledTitle: "Dienst vorübergehend nicht verfügbar",
+      disabledBody:
+        "Dieser Dienst ist derzeit deaktiviert. Wir schalten ihn zukünftig frei.",
+      linkRequiredTitle: "Signup-Link erforderlich",
+      linkRequiredBody:
+        "Um einen Trial zu starten, fordere bitte zuerst eine Demo an. Der Vertrieb sendet dir einen personalisierten Signup-Link.",
+      unavailableTitle: "Signup vorübergehend nicht verfügbar",
+      unavailableBody:
+        "Wir konnten deinen Signup-Link nicht validieren. Bitte versuche es gleich nochmal oder kontaktiere support@itsbusiness.ch.",
+      invalidTitle: "Ungültiger oder bereits genutzter Link",
+      invalidBody:
+        "Dieser Signup-Link ist nicht mehr gültig. Bitte fordere eine neue Demo an, um einen neuen Link zu erhalten.",
+      expiredTitle: "Signup-Link abgelaufen",
+      expiredBody:
+        "Dieser Signup-Link ist abgelaufen. Bitte fordere eine neue Demo an, um einen neuen Link zu erhalten.",
+      requestDemoCta: "Demo anfragen",
+      needHelp: "Brauchst du Hilfe? Kontaktiere",
+      contactForQuestions: "Bei Fragen kontaktiere bitte",
+    },
   },
   en: {
     htmlLang: "en",
@@ -292,6 +367,45 @@ export const content: Record<Lang, Copy> = {
         ],
         cta: "Request a quote",
       },
+    },
+    signup: {
+      startHeading: "Start your trial",
+      activateHeading: "Activate your trial",
+      subtitle: "14 days, full feature set, no payment information required.",
+      fullName: "Full name",
+      workEmail: "Work email",
+      company: "Company",
+      activatingFor: "Activating trial for",
+      requestTrial: "Request trial",
+      activateTrial: "Activate trial",
+      submitting: "Submitting…",
+      consent: "By submitting you agree to be contacted regarding your trial.",
+      thankYou: "Thank you",
+      questionsReach: "For questions reach out to",
+      successFramework:
+        "Trial activated. Check your email for your license key and setup instructions.",
+      successTmgmt:
+        "Trial activated. Check your email for your download links and access code.",
+      errorGeneric:
+        "Something went wrong. Please try again or contact support@itsbusiness.ch.",
+      disabledTitle: "Service temporarily unavailable",
+      disabledBody:
+        "This service is currently disabled. We will enable it in the future.",
+      linkRequiredTitle: "Signup link required",
+      linkRequiredBody:
+        "To start a trial, please request a demo first. Sales will send you a personalized signup link.",
+      unavailableTitle: "Signup temporarily unavailable",
+      unavailableBody:
+        "We could not validate your signup link. Please try again in a moment or contact support@itsbusiness.ch.",
+      invalidTitle: "Invalid or already used link",
+      invalidBody:
+        "This signup link is no longer valid. Please request a fresh demo to receive a new link.",
+      expiredTitle: "Signup link expired",
+      expiredBody:
+        "This signup link has expired. Please request a fresh demo to receive a new link.",
+      requestDemoCta: "Request a demo",
+      needHelp: "Need help? Contact",
+      contactForQuestions: "For questions please contact",
     },
   },
 };

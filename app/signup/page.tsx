@@ -2,21 +2,29 @@ import { notFound } from "next/navigation";
 import SignupForm from "./SignupForm";
 import { findPendingLicenseByToken } from "../api/signup/lib/keygen";
 import { resolveProduct, isOffered, isVetted } from "../products";
+import {
+  content,
+  resolveLang,
+  withLang,
+  type Lang,
+  type SignupCopy,
+} from "../content";
 
 export const dynamic = "force-dynamic";
 
 interface SignupPageProps {
-  searchParams: Promise<{ token?: string; product?: string }>;
+  searchParams: Promise<{ token?: string; product?: string; lang?: string }>;
 }
 
 export default async function SignupPage({ searchParams }: SignupPageProps) {
+  const { token, product: productParam, lang: langParam } = await searchParams;
+  const lang = resolveLang(langParam);
+  const c = content[lang].signup;
+
   const enabled = process.env.SIGNUP_ENABLED === "true";
-
   if (!enabled) {
-    return <Disclaimer />;
+    return <Disclaimer c={c} />;
   }
-
-  const { token, product: productParam } = await searchParams;
 
   // No token → open self-serve path. Allowed only for a product whose vetting is
   // OFF; the chosen product comes from ?product= (defaults to framework).
@@ -26,12 +34,14 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     if (isVetted(product)) {
       return (
         <TokenError
-          title="Signup link required"
-          body="To start a trial, please request a demo first. Sales will send you a personalized signup link."
+          c={c}
+          lang={lang}
+          title={c.linkRequiredTitle}
+          body={c.linkRequiredBody}
         />
       );
     }
-    return <SignupForm token={null} product={product} />;
+    return <SignupForm token={null} product={product} copy={c} />;
   }
 
   const dryRun = process.env.DRY_RUN === "true";
@@ -42,27 +52,23 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     console.error("[signup][page] token lookup failed", err);
     return (
       <TokenError
-        title="Signup temporarily unavailable"
-        body="We could not validate your signup link. Please try again in a moment or contact support@itsbusiness.ch."
+        c={c}
+        lang={lang}
+        title={c.unavailableTitle}
+        body={c.unavailableBody}
       />
     );
   }
 
   if (!pending) {
     return (
-      <TokenError
-        title="Invalid or already used link"
-        body="This signup link is no longer valid. Please request a fresh demo to receive a new link."
-      />
+      <TokenError c={c} lang={lang} title={c.invalidTitle} body={c.invalidBody} />
     );
   }
 
   if (isExpired(pending.tokenExpiresAt)) {
     return (
-      <TokenError
-        title="Signup link expired"
-        body="This signup link has expired. Please request a fresh demo to receive a new link."
-      />
+      <TokenError c={c} lang={lang} title={c.expiredTitle} body={c.expiredBody} />
     );
   }
 
@@ -78,6 +84,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
       token={token}
       product={resolveProduct(md.product)}
       prefill={prefill}
+      copy={c}
     />
   );
 }
@@ -87,19 +94,18 @@ function isExpired(tokenExpiresAt: string): boolean {
   return Date.parse(tokenExpiresAt) < Date.now();
 }
 
-function Disclaimer() {
+function Disclaimer({ c }: { c: SignupCopy }) {
   return (
     <main className="flex-1 flex items-center justify-center px-6 py-24">
       <div className="max-w-md text-center">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-          Service temporarily unavailable
+          {c.disabledTitle}
         </h1>
         <p className="mt-4 text-base text-slate-600 dark:text-slate-300">
-          This service is currently disabled. We will enable it in the
-          future.
+          {c.disabledBody}
         </p>
         <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">
-          For questions please contact{" "}
+          {c.contactForQuestions}{" "}
           <a
             href="mailto:support@itsbusiness.ch"
             className="underline hover:text-slate-700 dark:hover:text-slate-200"
@@ -113,7 +119,17 @@ function Disclaimer() {
   );
 }
 
-function TokenError({ title, body }: { title: string; body: string }) {
+function TokenError({
+  c,
+  lang,
+  title,
+  body,
+}: {
+  c: SignupCopy;
+  lang: Lang;
+  title: string;
+  body: string;
+}) {
   return (
     <main className="flex-1 flex items-center justify-center px-6 py-24">
       <div className="max-w-md text-center">
@@ -124,13 +140,13 @@ function TokenError({ title, body }: { title: string; body: string }) {
           {body}
         </p>
         <a
-          href="/demo-request"
+          href={withLang("/demo-request", lang)}
           className="mt-8 inline-flex items-center justify-center rounded-md bg-slate-900 px-6 py-3 text-base font-medium text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
         >
-          Request a demo
+          {c.requestDemoCta}
         </a>
         <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">
-          Need help? Contact{" "}
+          {c.needHelp}{" "}
           <a
             href="mailto:support@itsbusiness.ch"
             className="underline hover:text-slate-700 dark:hover:text-slate-200"
