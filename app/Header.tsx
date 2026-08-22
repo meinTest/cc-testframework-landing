@@ -3,17 +3,17 @@ import Link from "next/link";
 import Image from "next/image";
 import LangToggle from "./LangToggle";
 import ThemeToggle from "./ThemeToggle";
-import logo from "./mTs_logo.png";
+import logo from "./itsbusiness_logo.png";
 
 /** Global site header (rendered on every page from the root layout). */
 export default function SiteHeader() {
   return (
     <header className="px-6 py-4">
       <div className="flex items-center justify-between gap-4 max-w-5xl mx-auto w-full">
-        <Link href="/" aria-label="meinTest — home" className="inline-flex">
+        <Link href="/" aria-label="itsbusiness — home" className="inline-flex">
           <Image
             src={logo}
-            alt="meinTest GmbH"
+            alt="itsbusiness AG"
             priority
             className="h-10 w-auto"
           />
