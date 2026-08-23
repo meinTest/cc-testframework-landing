@@ -2,17 +2,20 @@
 
 import { useState } from "react";
 import type { ProductId } from "../products";
+import type { DemoRequestCopy } from "../content";
 
 type FormState = "idle" | "submitting" | "ok" | "error";
 
 interface DemoRequestFormProps {
   product: ProductId;
   productLabel: string;
+  copy: DemoRequestCopy;
 }
 
 export default function DemoRequestForm({
   product,
   productLabel,
+  copy,
 }: DemoRequestFormProps) {
   const [state, setState] = useState<FormState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -39,15 +42,19 @@ export default function DemoRequestForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data?.message ?? "Request failed");
+        console.error("[demo-request] failed:", data?.message);
+        setState("error");
+        setErrorMessage(copy.errorGeneric);
+        return;
       }
-      setSuccessMessage(data?.message ?? "Request received.");
+      setSuccessMessage(copy.success);
       setState("ok");
     } catch (err) {
+      console.error("[demo-request] request error", err);
       setState("error");
-      setErrorMessage(err instanceof Error ? err.message : "Unknown error");
+      setErrorMessage(copy.errorGeneric);
     }
   }
 
@@ -56,13 +63,13 @@ export default function DemoRequestForm({
       <main className="flex-1 flex items-center justify-center px-6 py-24">
         <div className="max-w-md text-center">
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-            Thank you
+            {copy.thankYou}
           </h1>
           <p className="mt-4 text-base text-slate-600 dark:text-slate-300">
             {successMessage}
           </p>
           <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">
-            We will reach out from{" "}
+            {copy.reachOutFrom}{" "}
             <a
               href="mailto:support@itsbusiness.ch"
               className="underline hover:text-slate-700 dark:hover:text-slate-200"
@@ -80,40 +87,41 @@ export default function DemoRequestForm({
     <main className="flex-1 flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-md">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-          Request a demo
+          {copy.heading}
         </h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          Tell us a bit about your team and we will send you a personalized
-          trial link within one business day.
+          {copy.subtitle}
         </p>
 
         <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
-          <span className="text-slate-400 dark:text-slate-500">Product:</span>
+          <span className="text-slate-400 dark:text-slate-500">
+            {copy.productLabel}
+          </span>
           <span className="font-medium text-slate-900 dark:text-white">
             {productLabel}
           </span>
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-          <Field name="name" label="Full name" required autoComplete="name" />
+          <Field name="name" label={copy.fullName} required autoComplete="name" />
           <Field
             name="email"
-            label="Work email"
+            label={copy.workEmail}
             type="email"
             required
             autoComplete="email"
           />
           <Field
             name="company"
-            label="Company"
+            label={copy.company}
             required
             autoComplete="organization"
           />
           <TextArea
             name="useCase"
-            label="Use case"
+            label={copy.useCase}
             required
-            hint="One to three sentences on what you would like to test."
+            hint={copy.useCaseHint}
           />
 
           <button
@@ -121,7 +129,7 @@ export default function DemoRequestForm({
             disabled={state === "submitting"}
             className="w-full rounded-md bg-brand px-4 py-2.5 text-base font-semibold text-white hover:bg-brand-strong disabled:opacity-50"
           >
-            {state === "submitting" ? "Submitting…" : "Request trial link"}
+            {state === "submitting" ? copy.submitting : copy.submit}
           </button>
 
           {state === "error" && errorMessage && (

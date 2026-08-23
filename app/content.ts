@@ -98,6 +98,23 @@ export interface SignupCopy {
   contactForQuestions: string;
 }
 
+export interface DemoRequestCopy {
+  heading: string;
+  subtitle: string;
+  productLabel: string;
+  fullName: string;
+  workEmail: string;
+  company: string;
+  useCase: string;
+  useCaseHint: string;
+  submitting: string;
+  submit: string;
+  thankYou: string;
+  success: string;
+  reachOutFrom: string;
+  errorGeneric: string;
+}
+
 type Copy = {
   htmlLang: string;
   nav: {
@@ -124,6 +141,7 @@ type Copy = {
   mgmt: ProductDetail;
   pricing: PricingCopy;
   signup: SignupCopy;
+  demoRequest: DemoRequestCopy;
 };
 
 export const content: Record<Lang, Copy> = {
@@ -267,6 +285,24 @@ export const content: Record<Lang, Copy> = {
       needHelp: "Brauchst du Hilfe? Kontaktiere",
       contactForQuestions: "Bei Fragen kontaktiere bitte",
     },
+    demoRequest: {
+      heading: "Demo anfragen",
+      subtitle:
+        "Erzähl uns kurz etwas über dein Team, dann senden wir dir innerhalb eines Werktags einen personalisierten Trial-Link.",
+      productLabel: "Produkt:",
+      fullName: "Vollständiger Name",
+      workEmail: "Geschäftliche E-Mail",
+      company: "Firma",
+      useCase: "Anwendungsfall",
+      useCaseHint: "Ein bis drei Sätze dazu, was du testen möchtest.",
+      submitting: "Wird gesendet…",
+      submit: "Trial-Link anfragen",
+      thankYou: "Danke",
+      success: "Anfrage erhalten. Wir melden uns innerhalb eines Werktags.",
+      reachOutFrom: "Wir melden uns von",
+      errorGeneric:
+        "Etwas ist schiefgelaufen. Bitte versuche es erneut oder kontaktiere support@itsbusiness.ch.",
+    },
   },
   en: {
     htmlLang: "en",
@@ -406,6 +442,24 @@ export const content: Record<Lang, Copy> = {
       requestDemoCta: "Request a demo",
       needHelp: "Need help? Contact",
       contactForQuestions: "For questions please contact",
+    },
+    demoRequest: {
+      heading: "Request a demo",
+      subtitle:
+        "Tell us a bit about your team and we will send you a personalized trial link within one business day.",
+      productLabel: "Product:",
+      fullName: "Full name",
+      workEmail: "Work email",
+      company: "Company",
+      useCase: "Use case",
+      useCaseHint: "One to three sentences on what you would like to test.",
+      submitting: "Submitting…",
+      submit: "Request trial link",
+      thankYou: "Thank you",
+      success: "Request received. We will get back to you within one business day.",
+      reachOutFrom: "We will reach out from",
+      errorGeneric:
+        "Something went wrong. Please try again or contact support@itsbusiness.ch.",
     },
   },
 };
