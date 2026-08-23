@@ -28,6 +28,7 @@ export async function GET(request: Request) {
     entitled: result.entitled,
     code: result.code,
     meta: result.meta,
+    billing: result.billing,
   });
 }
 

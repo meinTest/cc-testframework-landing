@@ -188,7 +188,16 @@ export interface LicenseStatusMeta {
 }
 
 export type LicenseStatusResult =
-  | { kind: "ok"; valid: boolean; entitled: boolean; code: string; meta: LicenseStatusMeta }
+  | {
+      kind: "ok";
+      valid: boolean;
+      entitled: boolean;
+      code: string;
+      meta: LicenseStatusMeta;
+      // manageable ⇔ the license is tied to a Stripe subscription, so the client
+      // can offer a "manage/cancel subscription" button (#13).
+      billing: { manageable: boolean };
+    }
   | { kind: "missing" }
   | { kind: "unavailable" };
 
@@ -210,6 +219,7 @@ export async function licenseStatus(
         customerName: "Dry Run Tester",
         expiry: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
       },
+      billing: { manageable: true },
     };
   }
 
@@ -222,6 +232,9 @@ export async function licenseStatus(
   const product = resolveProductId(body);
   // Same rule as the npm broker / feedback: valid AND product ∈ ENTITLED_PRODUCTS.
   const entitled = valid && product !== null && ENTITLED_PRODUCTS.includes(product);
+  // Manageable when the license is tied to a Stripe subscription (paid), so the
+  // client can surface the "manage/cancel subscription" button (#13).
+  const manageable = valid && asString(metadata.subscriptionId).length > 0;
 
   return {
     kind: "ok",
@@ -237,6 +250,43 @@ export async function licenseStatus(
           ? body.data.attributes.expiry
           : null,
     },
+    billing: { manageable },
+  };
+}
+
+// Billing reference for the /api/license/portal endpoint (#13): resolves the
+// license's Stripe customer/subscription from its keygen metadata. Uses the same
+// public validate-key call (no admin token). Never exposes these ids to clients.
+export type LicenseBillingRef =
+  | { kind: "ok"; customerId: string | null; subscriptionId: string | null }
+  | { kind: "missing" }
+  | { kind: "invalid" }
+  | { kind: "forbidden" }
+  | { kind: "unavailable" };
+
+export async function licenseBillingRef(
+  licenseKey: string,
+  dryRun: boolean,
+): Promise<LicenseBillingRef> {
+  if (!licenseKey) return { kind: "missing" };
+  if (dryRun) {
+    return { kind: "ok", customerId: "cus_DRYRUN", subscriptionId: "sub_DRYRUN" };
+  }
+
+  const body = await validateKey(licenseKey);
+  if (!body) return { kind: "unavailable" };
+  if (body?.meta?.valid !== true) return { kind: "invalid" };
+
+  const product = resolveProductId(body);
+  if (product === null || !ENTITLED_PRODUCTS.includes(product)) {
+    return { kind: "forbidden" };
+  }
+
+  const md = body?.data?.attributes?.metadata ?? {};
+  return {
+    kind: "ok",
+    customerId: asString(md.stripeCustomerId) || null,
+    subscriptionId: asString(md.subscriptionId) || null,
   };
 }
 

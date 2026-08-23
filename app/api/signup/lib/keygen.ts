@@ -426,6 +426,9 @@ export interface PaidLicenseInput {
   company: string;
   email: string;
   subscriptionId: string;
+  // Stripe customer id — stored so /api/license/portal can open the customer's
+  // billing portal without an extra subscription lookup (#13).
+  stripeCustomerId: string;
   seatIndex: number;
   expiresAt: string; // ISO — mirrors the Stripe subscription's current_period_end
 }
@@ -478,6 +481,7 @@ export async function createPaidLicense(
               company: input.company,
               email: input.email,
               subscriptionId: input.subscriptionId,
+              stripeCustomerId: input.stripeCustomerId,
               seatIndex: input.seatIndex,
               issuedAt: new Date().toISOString(),
             },

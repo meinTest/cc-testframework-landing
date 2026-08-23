@@ -106,7 +106,15 @@ async function reconcile(
     const seat = bySeat.get(seatIndex);
     if (!seat) {
       const created = await createPaidLicense(
-        { product, company, email, subscriptionId, seatIndex, expiresAt },
+        {
+          product,
+          company,
+          email,
+          subscriptionId,
+          stripeCustomerId: sub.customer ? String(sub.customer) : "",
+          seatIndex,
+          expiresAt,
+        },
         dryRun,
       );
       activeKeys.push(created.key);
