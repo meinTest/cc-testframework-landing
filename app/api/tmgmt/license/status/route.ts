@@ -16,11 +16,23 @@ export async function GET(request: Request) {
   const result = await licenseStatus(licenseKeyFromRequest(request), dryRun);
 
   if (result.kind === "missing") {
-    return json(401, { valid: false, entitled: false, code: "MISSING_KEY", meta: emptyMeta() });
+    return json(401, {
+      valid: false,
+      entitled: false,
+      code: "MISSING_KEY",
+      meta: emptyMeta(),
+      billing: { manageable: false, upgradeable: false },
+    });
   }
   if (result.kind === "unavailable") {
     // Transient upstream (keygen) failure — never a definitive "invalid".
-    return json(502, { valid: false, entitled: false, code: "UNAVAILABLE", meta: emptyMeta() });
+    return json(502, {
+      valid: false,
+      entitled: false,
+      code: "UNAVAILABLE",
+      meta: emptyMeta(),
+      billing: { manageable: false, upgradeable: false },
+    });
   }
 
   return json(200, {

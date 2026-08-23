@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       entitled: false,
       code: "MISSING_KEY",
       meta: emptyMeta(),
-      billing: { manageable: false },
+      billing: { manageable: false, upgradeable: false },
     });
   }
   if (result.kind === "unavailable") {
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
       entitled: false,
       code: "UNAVAILABLE",
       meta: emptyMeta(),
-      billing: { manageable: false },
+      billing: { manageable: false, upgradeable: false },
     });
   }
 

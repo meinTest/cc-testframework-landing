@@ -194,9 +194,10 @@ export type LicenseStatusResult =
       entitled: boolean;
       code: string;
       meta: LicenseStatusMeta;
-      // manageable ⇔ the license is tied to a Stripe subscription, so the client
-      // can offer a "manage/cancel subscription" button (#13).
-      billing: { manageable: boolean };
+      // manageable ⇔ tied to a Stripe subscription → "manage/cancel" (#13).
+      // upgradeable ⇔ a trial with no subscription → "upgrade to paid" (#14).
+      // Mutually exclusive in practice.
+      billing: { manageable: boolean; upgradeable: boolean };
     }
   | { kind: "missing" }
   | { kind: "unavailable" };
@@ -219,7 +220,7 @@ export async function licenseStatus(
         customerName: "Dry Run Tester",
         expiry: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
       },
-      billing: { manageable: true },
+      billing: { manageable: true, upgradeable: false },
     };
   }
 
@@ -232,9 +233,11 @@ export async function licenseStatus(
   const product = resolveProductId(body);
   // Same rule as the npm broker / feedback: valid AND product ∈ ENTITLED_PRODUCTS.
   const entitled = valid && product !== null && ENTITLED_PRODUCTS.includes(product);
-  // Manageable when the license is tied to a Stripe subscription (paid), so the
-  // client can surface the "manage/cancel subscription" button (#13).
-  const manageable = valid && asString(metadata.subscriptionId).length > 0;
+  // Manageable when tied to a Stripe subscription (paid) → "manage/cancel" (#13);
+  // upgradeable when it's a trial with no subscription → "upgrade to paid" (#14).
+  const hasSubscription = asString(metadata.subscriptionId).length > 0;
+  const manageable = valid && hasSubscription;
+  const upgradeable = valid && entitled && !hasSubscription && isTrialPolicy(body);
 
   return {
     kind: "ok",
@@ -250,7 +253,7 @@ export async function licenseStatus(
           ? body.data.attributes.expiry
           : null,
     },
-    billing: { manageable },
+    billing: { manageable, upgradeable },
   };
 }
 
@@ -287,6 +290,72 @@ export async function licenseBillingRef(
     kind: "ok",
     customerId: asString(md.stripeCustomerId) || null,
     subscriptionId: asString(md.subscriptionId) || null,
+  };
+}
+
+// A license is trial-upgradeable when it sits on a configured trial policy (by id
+// or a "trial" name). Paid/perpetual/hand-issued policies are not upgradeable.
+function isTrialPolicy(body: KeygenValidation): boolean {
+  const policy = extractPolicy(body);
+  const trials = [
+    process.env.KEYGEN_TRIAL_POLICY_ID,
+    process.env.KEYGEN_TMGMT_TRIAL_POLICY_ID,
+  ];
+  if (policy.id && trials.includes(policy.id)) return true;
+  return (policy.name ?? "").toLowerCase().includes("trial");
+}
+
+// Info the /api/license/checkout + /plans endpoints need (#14): the license's
+// product, its own id + email (to tie the checkout back / prefill), and whether
+// it is already paid (manageable) or a trial that can be upgraded (upgradeable).
+export type LicenseCheckoutInfo =
+  | {
+      kind: "ok";
+      product: ProductId;
+      licenseId: string;
+      email: string | null;
+      manageable: boolean;
+      upgradeable: boolean;
+    }
+  | { kind: "missing" }
+  | { kind: "invalid" }
+  | { kind: "forbidden" }
+  | { kind: "unavailable" };
+
+export async function licenseCheckoutInfo(
+  licenseKey: string,
+  dryRun: boolean,
+): Promise<LicenseCheckoutInfo> {
+  if (!licenseKey) return { kind: "missing" };
+  if (dryRun) {
+    return {
+      kind: "ok",
+      product: PRODUCT,
+      licenseId: "dry-run-license-id",
+      email: "dry-run@example.com",
+      manageable: false,
+      upgradeable: true,
+    };
+  }
+
+  const body = await validateKey(licenseKey);
+  if (!body) return { kind: "unavailable" };
+  if (body?.meta?.valid !== true) return { kind: "invalid" };
+
+  const product = resolveProductId(body);
+  if (product === null || !ENTITLED_PRODUCTS.includes(product)) {
+    return { kind: "forbidden" };
+  }
+
+  const md = body?.data?.attributes?.metadata ?? {};
+  const hasSubscription = asString(md.subscriptionId).length > 0;
+  return {
+    kind: "ok",
+    product,
+    licenseId: body?.data?.id ?? "",
+    email: asString(md.email) || null,
+    manageable: hasSubscription,
+    upgradeable: !hasSubscription && isTrialPolicy(body),
   };
 }
 
