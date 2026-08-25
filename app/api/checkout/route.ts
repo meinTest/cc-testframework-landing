@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { resolveProduct, type ProductId } from "../../products";
+import { purchasesEnabled } from "../../flags";
 import { getStripePricing } from "../../lib/stripe-pricing";
 import { CURRENCIES, type BillingCycle, type Currency } from "../../pricing";
 
@@ -28,6 +29,13 @@ export async function GET(request: Request) {
   ) as Currency;
 
   const origin = originFromRequest(request);
+
+  // Purchase kill-switch (PURCHASE_ENABLED=false) → show the unavailable notice.
+  if (!purchasesEnabled()) {
+    const lang = params.get("lang") === "en" ? "en" : "de";
+    return NextResponse.redirect(`${origin}/unavailable?lang=${lang}`, 303);
+  }
+
   const salesFallback = `${origin}/demo-request?product=${product}&plan=subscription`;
 
   const secret = process.env.STRIPE_SECRET_KEY;

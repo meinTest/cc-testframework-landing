@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { licenseCheckoutInfo, licenseKeyFromRequest } from "../../tmgmt/lib/entitlement";
 import { getStripePricing } from "../../../lib/stripe-pricing";
 import { CURRENCIES, type BillingCycle, type Currency } from "../../../pricing";
+import { purchasesEnabled } from "../../../flags";
 
 // Trial→Paid upgrade (#14). The customer (TMT) picks currency/cycle/seats from
 // /api/license/plans and POSTs them here with their license key; we create a
@@ -16,6 +17,11 @@ const DEFAULT_RETURN_URL = "https://itsbusiness.vercel.app";
 
 export async function POST(request: Request) {
   const dryRun = process.env.DRY_RUN === "true";
+
+  // Purchase kill-switch (PURCHASE_ENABLED=false).
+  if (!purchasesEnabled()) {
+    return err(503, "PURCHASE_DISABLED", "Dienst vorübergehend nicht verfügbar.");
+  }
 
   const info = await licenseCheckoutInfo(licenseKeyFromRequest(request), dryRun);
   if (info.kind === "missing") return err(401, "MISSING_KEY", "Missing license key");
