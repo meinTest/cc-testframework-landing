@@ -64,6 +64,13 @@ export interface CreatedIssue {
 
 export interface FeedbackReport {
   issueNumber: number;
+  // The customer's own issue title. Lets the client show a real title (not just
+  // "#123") for reports that reappear after a reinstall (TMT #213).
+  title: string;
+  // "bug" | "feature", from the `type:*` label. Falls back to "bug" if absent.
+  type: FeedbackType;
+  // Issue creation date (ISO), so a re-synced report keeps its original date.
+  createdAt: string;
   status: FeedbackStatus;
   statusReason: string | null;
   // App version the report was FILED against (from the `version:<version>` label
@@ -141,6 +148,9 @@ export async function listCustomerIssues(
     return [
       {
         issueNumber: 124,
+        title: "Export schlägt bei großen Testläufen fehl",
+        type: "bug",
+        createdAt: new Date(Date.now() - 12 * 86400000).toISOString(),
         status: "done",
         statusReason: null,
         foundVersion: "0.6.2",
@@ -149,6 +159,9 @@ export async function listCustomerIssues(
       },
       {
         issueNumber: 123,
+        title: "Dunkles Design für die Ergebnisansicht",
+        type: "feature",
+        createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
         status: "in_progress",
         statusReason: null,
         foundVersion: "0.29.0",
@@ -157,6 +170,9 @@ export async function listCustomerIssues(
       },
       {
         issueNumber: 120,
+        title: "Integration mit Fremdsystem X",
+        type: "feature",
+        createdAt: new Date(Date.now() - 20 * 86400000).toISOString(),
         status: "rejected",
         statusReason: "Außerhalb des Scopes.",
         foundVersion: null,
@@ -188,6 +204,9 @@ export async function listCustomerIssues(
         : null;
     reports.push({
       issueNumber: issue.number,
+      title: issue.title,
+      type: extractType(issue),
+      createdAt: issue.created_at,
       status,
       statusReason,
       foundVersion: extractFoundVersion(issue),
@@ -410,6 +429,14 @@ function labelNames(issue: {
 
 function isReceived(state: string, labels: string[]): boolean {
   return state === "open" && !labels.some((l) => NON_RECEIVED_LABELS.includes(l));
+}
+
+// Report type from the `type:*` label. Defaults to "bug" when the label is
+// missing (older issues) so the client always gets a valid value.
+function extractType(issue: {
+  labels: (string | { name?: string })[];
+}): FeedbackType {
+  return labelNames(issue).includes("type:feature") ? "feature" : "bug";
 }
 
 // Version the report was filed against, from the `version:<version>` label set
