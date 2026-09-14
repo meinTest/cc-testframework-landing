@@ -44,3 +44,10 @@ next-env.d.ts
 # generated license / preview PDFs (contain customer data + keys — never commit)
 sample-license*.pdf
 Lizenz_*.pdf
+
+# local-only working files (never commit): editor/agent settings, scratch
+# screenshots, internal handoff notes and asset templates.
+/.claude/
+/Assets/
+/Issues/
+/docs/handoff.md
