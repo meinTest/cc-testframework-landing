@@ -16,6 +16,16 @@ export const PRODUCT_LABELS: Record<ProductId, string> = {
   "cc-tmgmt": "CC Test Management",
 };
 
+/**
+ * URL slug of each product's detail/pricing pages (e.g. /cc-testmanagement,
+ * /cc-testmanagement/pricing). Kept here as the single source of truth — the
+ * checkout cancel URL and the public products API both build links from it.
+ */
+export const PRODUCT_SLUGS: Record<ProductId, string> = {
+  "cc-testframework": "cc-testframework",
+  "cc-tmgmt": "cc-testmanagement",
+};
+
 /** Coerce an unknown/legacy value into a supported ProductId (defaults to framework). */
 export function resolveProduct(value: unknown): ProductId {
   return value === "cc-tmgmt" ? "cc-tmgmt" : DEFAULT_PRODUCT;
