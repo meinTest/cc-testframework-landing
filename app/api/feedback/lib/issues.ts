@@ -71,6 +71,12 @@ export interface FeedbackReport {
   type: FeedbackType;
   // Issue creation date (ISO), so a re-synced report keeps its original date.
   createdAt: string;
+  // The customer's own description/repro text WITH the "[screenshot-<n>.png]"
+  // markers (screenshot links reversed), so a client that lost its local copy
+  // (reinstall / second machine) can restore the report incl. inline images
+  // (TMT#245). repro is null when the report had none.
+  description: string;
+  repro: string | null;
   status: FeedbackStatus;
   statusReason: string | null;
   // App version the report was FILED against (from the `version:<version>` label
@@ -110,10 +116,12 @@ export async function createIssue(
   input: CreateIssueInput,
   dryRun: boolean,
 ): Promise<CreatedIssue> {
+  const imageUrls = input.imageUrls ?? [];
   const body = buildBody(
     input.description,
     input.repro,
-    buildScreenshotsSection(input.imageUrls ?? []),
+    buildScreenshotsSection(imageUrls),
+    imageUrls,
   );
   const labels = buildLabels(input);
 
@@ -151,6 +159,8 @@ export async function listCustomerIssues(
         title: "Export schlägt bei großen Testläufen fehl",
         type: "bug",
         createdAt: new Date(Date.now() - 12 * 86400000).toISOString(),
+        description: "Beim Export großer Läufe [screenshot-1.png] bricht die App ab.",
+        repro: "1. Großen Lauf öffnen\n2. Export klicken",
         status: "done",
         statusReason: null,
         foundVersion: "0.6.2",
@@ -162,6 +172,8 @@ export async function listCustomerIssues(
         title: "Dunkles Design für die Ergebnisansicht",
         type: "feature",
         createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+        description: "Bitte einen Dark-Mode für die Ergebnisansicht.",
+        repro: null,
         status: "in_progress",
         statusReason: null,
         foundVersion: "0.29.0",
@@ -173,6 +185,8 @@ export async function listCustomerIssues(
         title: "Integration mit Fremdsystem X",
         type: "feature",
         createdAt: new Date(Date.now() - 20 * 86400000).toISOString(),
+        description: "Anbindung an System X wäre hilfreich.",
+        repro: null,
         status: "rejected",
         statusReason: "Außerhalb des Scopes.",
         foundVersion: null,
@@ -202,11 +216,14 @@ export async function listCustomerIssues(
       issue.state === "closed"
         ? await releasedReason(client, owner, repo, issue.number)
         : null;
+    const { description, repro } = extractBodyFields(issue.body ?? "");
     reports.push({
       issueNumber: issue.number,
       title: issue.title,
       type: extractType(issue),
       createdAt: issue.created_at,
+      description,
+      repro,
       status,
       statusReason,
       foundVersion: extractFoundVersion(issue),
@@ -230,9 +247,16 @@ function buildBody(
   description: string,
   repro: string | undefined,
   screenshotsSection?: string | null,
+  imageUrls: string[] = [],
 ): string {
-  const lines: string[] = ["## Beschreibung", "", description];
-  if (repro) lines.push("", "## Reproduktionsschritte", "", repro);
+  // Rewrite "[screenshot-<n>.png]" markers in the customer text into links at
+  // their position (TMT#245). The screenshots section is appended verbatim (it
+  // is already a list of links), so it must NOT be run through the linkifier.
+  const desc = linkifyScreenshotMarkers(description, imageUrls);
+  const lines: string[] = ["## Beschreibung", "", desc];
+  if (repro) {
+    lines.push("", "## Reproduktionsschritte", "", linkifyScreenshotMarkers(repro, imageUrls));
+  }
   if (screenshotsSection) lines.push("", screenshotsSection);
   return lines.join("\n");
 }
@@ -251,14 +275,97 @@ function buildScreenshotsSection(imageUrls: string[]): string | null {
   return [SCREENSHOTS_HEADING, "", ...items].join("\n");
 }
 
-// On edit the client sends no images, so preserve the existing screenshots
-// section verbatim. It runs from its heading to the next "## " heading or EOF.
-function extractScreenshotsSection(body: string): string | null {
+// Body section headings buildBody emits. Used to slice description/repro back
+// out on read. The customer text may itself contain "## " sub-sections (the app
+// appends "## Robin-Kontext"/"## System-Log" into the description), so we split
+// ONLY on these known headings, never on any "## " line.
+const DESCRIPTION_HEADING = "## Beschreibung";
+const REPRO_HEADING = "## Reproduktionsschritte";
+
+// The ordered blob-view URLs of the existing "## Screenshots" section, in list
+// order (screenshot-1 first). [] when there is no section. Used on edit to
+// re-link the re-sent description markers when the image set is unchanged.
+export function extractScreenshotUrls(body: string): string[] {
   const start = body.indexOf(SCREENSHOTS_HEADING);
-  if (start < 0) return null;
+  if (start < 0) return [];
   const rest = body.slice(start);
   const next = rest.indexOf("\n## ", SCREENSHOTS_HEADING.length);
-  return (next >= 0 ? rest.slice(0, next) : rest).trimEnd();
+  const section = next >= 0 ? rest.slice(0, next) : rest;
+  const urls: string[] = [];
+  const re = /^- \[[^\]]+\]\(([^)]+)\)/gm;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(section))) urls.push(m[1]);
+  return urls;
+}
+
+// Screenshot marker "[screenshot-<n>.<ext>]" that is NOT already followed by a
+// "(" (so linkify is idempotent). Only the auto-named screenshot markers map
+// positionally to the uploaded images; markers with any other filename are left
+// untouched.
+const SCREENSHOT_MARKER_RE = /\[screenshot-(\d+)\.(?:png|jpe?g|webp)\](?!\()/gi;
+// A screenshot marker that already carries a "(url)" link — for the reverse.
+const SCREENSHOT_LINK_RE =
+  /(\[screenshot-(\d+)\.(?:png|jpe?g|webp)\])\([^)\s]*\)/gi;
+
+/**
+ * Replace each "[screenshot-<n>.png]" marker in the text with a clickable link
+ * "[screenshot-<n>.png](<url>)" at the same spot, mapping marker n → urls[n-1].
+ * Markers without a matching upload (or with a different filename) are left as
+ * plain text. The marker text is preserved verbatim so the rewrite is reversible.
+ */
+export function linkifyScreenshotMarkers(text: string, urls: string[]): string {
+  return text.replace(SCREENSHOT_MARKER_RE, (marker, n: string) => {
+    const url = urls[Number(n) - 1];
+    return url ? `${marker}(${url})` : marker;
+  });
+}
+
+/**
+ * Inverse of linkifyScreenshotMarkers: turn "[screenshot-<n>.png](<url>)" back
+ * into the plain "[screenshot-<n>.png]" marker, so a client reading the text can
+ * re-map the images inline. Non-screenshot links are untouched.
+ */
+export function stripScreenshotLinks(text: string): string {
+  return text.replace(SCREENSHOT_LINK_RE, "$1");
+}
+
+// Slice out the text between `startHeading` and the first of `endHeadings`
+// (or EOF). Only the known buildBody headings are used as boundaries.
+function sectionBetween(
+  body: string,
+  startHeading: string,
+  endHeadings: string[],
+): string | null {
+  const s = body.indexOf(startHeading);
+  if (s < 0) return null;
+  const from = s + startHeading.length;
+  let end = body.length;
+  for (const h of endHeadings) {
+    const i = body.indexOf("\n" + h, from);
+    if (i >= 0 && i < end) end = i;
+  }
+  return body.slice(from, end).trim();
+}
+
+/**
+ * Read the customer's original description/repro back out of an issue body, with
+ * the screenshot links turned back into "[screenshot-<n>.png]" markers so the
+ * client can restore the inline images. repro is null when the report had none.
+ */
+export function extractBodyFields(body: string): {
+  description: string;
+  repro: string | null;
+} {
+  const desc = sectionBetween(body, DESCRIPTION_HEADING, [
+    REPRO_HEADING,
+    SCREENSHOTS_HEADING,
+  ]);
+  const repro = sectionBetween(body, REPRO_HEADING, [SCREENSHOTS_HEADING]);
+  return {
+    // Legacy issues without our headings: fall back to the whole (stripped) body.
+    description: stripScreenshotLinks(desc ?? body).trim(),
+    repro: repro ? stripScreenshotLinks(repro) : null,
+  };
 }
 
 /**
@@ -329,13 +436,21 @@ export async function updateIssue(
   input: UpdateIssueInput,
   dryRun: boolean,
 ): Promise<{ updatedAt: string }> {
-  // Screenshots: rebuild the section when the client sent a set (undefined ⇒ no
-  // `images` field ⇒ keep the existing section untouched; [] ⇒ remove it).
-  const screenshotsSection =
+  // Effective image set: the client's new set, or — when it sent no `images`
+  // field (undefined ⇒ keep existing) — the URLs parsed back out of the current
+  // "## Screenshots" section. [] ⇒ explicit clear. These same URLs both rebuild
+  // the section and re-link the re-sent description/repro markers.
+  const effectiveUrls =
     input.imageUrls === undefined
-      ? extractScreenshotsSection(issue.body)
-      : buildScreenshotsSection(input.imageUrls);
-  const body = buildBody(input.description, input.repro, screenshotsSection);
+      ? extractScreenshotUrls(issue.body)
+      : input.imageUrls;
+  const screenshotsSection = buildScreenshotsSection(effectiveUrls);
+  const body = buildBody(
+    input.description,
+    input.repro,
+    screenshotsSection,
+    effectiveUrls,
+  );
   // Swap the type:* label; keep everything else (customer/company/source and the
   // version/platform/os telemetry labels — the client never resends telemetry on
   // edit, so the labels set at creation are preserved as-is).

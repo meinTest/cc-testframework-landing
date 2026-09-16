@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --import tsx --test tests/api/public-products.test.ts tests/api/public-pricing.test.ts"
+    "test": "node --import tsx --test tests/api/public-products.test.ts tests/api/public-pricing.test.ts tests/api/feedback-screenshots.test.ts"
   },
   "dependencies": {
     "@octokit/auth-app": "^8.2.0",
