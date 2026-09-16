@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyActionToken } from "../lib/action-token";
 import { issueToken } from "../lib/issue";
+import { validateTrialDays } from "../../signup/lib/trial";
 import { sendOnboardInvite } from "../../signup/lib/resend";
 
 const LOG_PREFIX = "[sales][action-issue]";
@@ -8,6 +9,7 @@ const LOG_PREFIX = "[sales][action-issue]";
 interface ActionIssuePayload {
   actionToken?: unknown;
   expiresInDays?: unknown;
+  trialDays?: unknown;
 }
 
 const DEFAULT_EXPIRES_IN_DAYS = 7;
@@ -67,11 +69,17 @@ export async function POST(request: Request) {
     expiresInDays = Math.floor(parsed);
   }
 
+  const trial = validateTrialDays(payload.trialDays);
+  if ("error" in trial) {
+    return NextResponse.json({ ok: false, message: trial.error }, { status: 400 });
+  }
+
   const input = {
     name: verified.payload.name,
     email: verified.payload.email,
     company: verified.payload.company,
     expiresInDays,
+    trialDays: trial.value,
     product: verified.payload.product,
   };
   const origin = originFromRequest(request);

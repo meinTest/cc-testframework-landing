@@ -65,7 +65,7 @@ export async function sendWelcomeEmail(
   const html = `
     <h1>Welcome to cc-testframework</h1>
     <p>Hi ${escape(input.customerName)},</p>
-    <p>your 14-day trial is ready. ${expiryLine}</p>
+    <p>your trial is ready. ${expiryLine}</p>
     <h2>1. Configure your license key</h2>
     <p>Set this environment variable on the machine that runs the tests. The same
        key also authenticates the package registry — no GitHub account required:</p>
@@ -90,7 +90,7 @@ export async function sendWelcomeEmail(
     ``,
     `Hi ${input.customerName},`,
     ``,
-    `your 14-day trial is ready. ${expiryLine.replace(/<[^>]+>/g, "")}`,
+    `your trial is ready. ${expiryLine.replace(/<[^>]+>/g, "")}`,
     ``,
     `1. Configure your license (also authenticates the registry — no GitHub needed):`,
     `   CC_LICENSE_KEY=${input.licenseKey}`,
@@ -153,7 +153,7 @@ export async function sendReminderEmail(
   const html = `
     <h1>Your cc-testframework trial ends soon</h1>
     <p>Hi ${escape(input.customerName)},</p>
-    <p>your 14-day trial expires on <strong>${expiresOn}</strong>.</p>
+    <p>your trial expires on <strong>${expiresOn}</strong>.</p>
     <p>If you would like to continue using cc-testframework beyond the
        trial, please reach out to our sales team at
        <a href="mailto:${input.salesEmail}">${input.salesEmail}</a>.
@@ -172,7 +172,7 @@ export async function sendReminderEmail(
     ``,
     `Hi ${input.customerName},`,
     ``,
-    `your 14-day trial expires on ${expiresOn}.`,
+    `your trial expires on ${expiresOn}.`,
     ``,
     `If you would like to continue using cc-testframework beyond the trial,`,
     `please reach out to ${input.salesEmail}. We will arrange a paid license`,

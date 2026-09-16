@@ -5,6 +5,7 @@ import {
   findPendingLicenseByToken,
 } from "./lib/keygen";
 import { sendWelcomeEmail, sendTmgmtWelcome, notifySupport } from "./lib/resend";
+import { sanitizeTrialDays } from "./lib/trial";
 import { resolveProduct, isOffered, isVetted, type ProductId } from "../../products";
 
 const LOG_PREFIX = "[signup]";
@@ -66,6 +67,10 @@ export async function POST(request: Request) {
   // self-serve — but only for a product whose vetting is OFF (per-product via
   // isVetted); a vetted product still requires a demo-request token.
   let product: ProductId;
+  // Sales-chosen trial length (#11), read from the pending-license metadata on
+  // the vetted path. Undefined on the open path → the trial inherits the Keygen
+  // policy default duration.
+  let trialDays: number | undefined;
   if (input.token) {
     try {
       const pending = await findPendingLicenseByToken(input.token, dryRun);
@@ -94,6 +99,7 @@ export async function POST(request: Request) {
       }
       pendingLicenseId = pending.id;
       product = resolveProduct(pending.metadata.product);
+      trialDays = sanitizeTrialDays(pending.metadata.trialDays);
     } catch (err) {
       console.error(`${LOG_PREFIX} token lookup failed`, err);
       return NextResponse.json(
@@ -137,7 +143,7 @@ export async function POST(request: Request) {
 
   let license;
   try {
-    license = await createTrialLicense({ ...input, product }, dryRun);
+    license = await createTrialLicense({ ...input, product, trialDays }, dryRun);
   } catch (err) {
     console.error(`${LOG_PREFIX} keygen step failed`, err);
     return NextResponse.json(

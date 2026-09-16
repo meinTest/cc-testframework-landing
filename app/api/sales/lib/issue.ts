@@ -1,11 +1,15 @@
 import { createPendingLicense } from "../../signup/lib/keygen";
+import { validateTrialDays } from "../../signup/lib/trial";
 import { resolveProduct, type ProductId } from "../../../products";
 
 export interface IssueInput {
   name: string;
   email: string;
   company: string;
+  // Signup-link validity in days.
   expiresInDays: number;
+  // Trial license length in days (#11) — distinct from expiresInDays.
+  trialDays: number;
   product: ProductId;
 }
 
@@ -20,6 +24,7 @@ export interface IssuePayload {
   email?: unknown;
   company?: unknown;
   expiresInDays?: unknown;
+  trialDays?: unknown;
   product?: unknown;
 }
 
@@ -53,8 +58,18 @@ export function validateIssuePayload(
     expiresInDays = Math.floor(parsed);
   }
 
+  const trial = validateTrialDays(payload.trialDays);
+  if ("error" in trial) return { error: trial.error };
+
   return {
-    value: { name, email, company, expiresInDays, product: resolveProduct(payload.product) },
+    value: {
+      name,
+      email,
+      company,
+      expiresInDays,
+      trialDays: trial.value,
+      product: resolveProduct(payload.product),
+    },
   };
 }
 
@@ -69,6 +84,7 @@ export async function issueToken(
       email: input.email,
       company: input.company,
       expiresInDays: input.expiresInDays,
+      trialDays: input.trialDays,
       product: input.product,
     },
     dryRun,

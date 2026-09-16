@@ -23,6 +23,7 @@ export default function ActionConfirm({ token, payload }: ActionConfirmProps) {
   const [state, setState] = useState<FormState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [expiresInDays, setExpiresInDays] = useState(7);
+  const [trialDays, setTrialDays] = useState(14);
   const [result, setResult] = useState<IssueResponse | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -35,7 +36,7 @@ export default function ActionConfirm({ token, payload }: ActionConfirmProps) {
       const response = await fetch("/api/sales/action-issue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionToken: token, expiresInDays }),
+        body: JSON.stringify({ actionToken: token, expiresInDays, trialDays }),
       });
       const data: IssueResponse = await response.json();
       if (!response.ok && response.status !== 207) {
@@ -92,6 +93,32 @@ export default function ActionConfirm({ token, payload }: ActionConfirmProps) {
               <option value={14}>14 days</option>
               <option value={30}>30 days (max)</option>
             </select>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              How long the /signup link stays usable — not the trial length.
+            </p>
+          </div>
+
+          <div>
+            <label
+              htmlFor="trialDays"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-200"
+            >
+              Trial duration
+            </label>
+            <select
+              id="trialDays"
+              value={trialDays}
+              onChange={(e) => setTrialDays(Number(e.target.value))}
+              className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            >
+              <option value={14}>14 days (default)</option>
+              <option value={30}>30 days</option>
+              <option value={60}>60 days</option>
+              <option value={90}>90 days</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              How long the issued trial license stays valid.
+            </p>
           </div>
 
           <button

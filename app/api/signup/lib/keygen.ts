@@ -1,4 +1,5 @@
 import type { ProductId } from "../../../products";
+import { DEFAULT_TRIAL_DAYS } from "./trial";
 
 export interface KeygenLicense {
   id: string;
@@ -16,6 +17,10 @@ interface CreateLicenseInput {
   name: string;
   company: string;
   product: ProductId;
+  // Sales-chosen trial length in days (#11). When set, the license expiry is
+  // fixed to now + trialDays, overriding the Keygen policy's default duration.
+  // Omitted (open self-serve / demo) → the policy default applies.
+  trialDays?: number;
 }
 
 const LOG_PREFIX = "[signup][keygen]";
@@ -29,14 +34,23 @@ export async function createTrialLicense(
   const adminToken = required("KEYGEN_ADMIN_TOKEN");
   const policyId = trialPolicyId(input.product);
 
+  // Sales-chosen expiry override (#11). Absent → the license inherits the
+  // Keygen policy's default duration (no `expiry` attribute sent).
+  const expiry =
+    input.trialDays != null
+      ? new Date(Date.now() + input.trialDays * 24 * 60 * 60 * 1000).toISOString()
+      : undefined;
+
   if (dryRun) {
     console.log(
-      `${LOG_PREFIX} DRY_RUN — would create ${input.product} license with policy=${policyId}, owner=${input.email}`,
+      `${LOG_PREFIX} DRY_RUN — would create ${input.product} license with policy=${policyId}, owner=${input.email}, trialDays=${input.trialDays ?? "policy-default"}`,
     );
     return {
       id: "dry-run-license-id",
       key: "DRY-RUN-XXXXX-XXXXX-XXXXX",
-      expiry: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      expiry:
+        expiry ??
+        new Date(Date.now() + DEFAULT_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
     };
   }
 
@@ -54,11 +68,13 @@ export async function createTrialLicense(
           type: "licenses",
           attributes: {
             name: `Trial — ${input.company} (${input.email})`,
+            ...(expiry ? { expiry } : {}),
             metadata: {
               product: input.product,
               email: input.email,
               customerName: input.name,
               company: input.company,
+              ...(input.trialDays != null ? { trialDays: input.trialDays } : {}),
               signupAt: new Date().toISOString(),
             },
           },
@@ -97,7 +113,12 @@ export interface PendingLicenseInput {
   email: string;
   name: string;
   company: string;
+  // Signup-link validity in days (how long /signup?token= stays usable).
   expiresInDays: number;
+  // Sales-chosen trial length in days — carried in the pending metadata and
+  // applied to the trial license at signup time (#11). Distinct from
+  // expiresInDays. Omitted → the trial inherits the Keygen policy default.
+  trialDays?: number;
   product: ProductId;
 }
 
@@ -151,6 +172,7 @@ export async function createPendingLicense(
               product: input.product,
               salesToken,
               tokenExpiresAt,
+              ...(input.trialDays != null ? { trialDays: input.trialDays } : {}),
               email: input.email,
               customerName: input.name,
               company: input.company,
