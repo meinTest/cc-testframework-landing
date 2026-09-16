@@ -13,9 +13,16 @@ const LOG_PREFIX = "[feedback]";
 // A maintainer comment starting with this sentinel is the ONLY comment content
 // ever surfaced to the customer (a deliberately released status reason).
 const CUSTOMER_VISIBLE_SENTINEL = ">>CUSTOMER:";
-// A report the customer removed from their in-tool list. The GitHub issue stays
-// OPEN and otherwise untouched (the team keeps working it); GET just hides it.
+// A report the customer removed from their in-tool list BEFORE #28. The GitHub
+// issue stays OPEN and otherwise untouched; GET just hides it. Kept only for
+// back-compat with reports withdrawn under the old behaviour.
 const CLIENT_HIDDEN_LABEL = "client-hidden";
+// A report the customer withdrew in the tool (#28). The issue is CLOSED as
+// not-planned and carries this label; GET hides it so it never surfaces as
+// "rejected".
+const WITHDRAWN_LABEL = "withdrawn";
+const WITHDRAWN_LABEL_COLOR = "bfbfbf";
+const WITHDRAWN_LABEL_DESCRIPTION = "Vom Kunden im Tool zurückgezogen";
 // Any of these labels means the report has left the "received" state, so the
 // customer may no longer edit or withdraw it. (client-hidden is NOT here — it
 // doesn't change the issue's workflow state.)
@@ -209,7 +216,10 @@ export async function listCustomerIssues(
   const reports: FeedbackReport[] = [];
   for (const issue of res.data) {
     if (issue.pull_request) continue; // listForRepo also returns PRs
-    if (labelNames(issue).includes(CLIENT_HIDDEN_LABEL)) continue; // removed from tool list
+    // Hide reports the customer removed/withdrew: old "client-hidden" (still
+    // open) and new "withdrawn" (closed not-planned). The latter MUST be hidden
+    // so it never shows up as "rejected" via mapStatus (#28).
+    if (isHiddenFromCustomer(labelNames(issue))) continue;
     const status = mapStatus(issue);
     // A released reason is only relevant once an issue is closed.
     const statusReason =
@@ -475,26 +485,75 @@ export async function updateIssue(
   return { updatedAt: res.data.updated_at };
 }
 
+/** True for a report the customer removed (old) or withdrew (new) — hidden from GET. */
+export function isHiddenFromCustomer(labels: string[]): boolean {
+  return labels.includes(CLIENT_HIDDEN_LABEL) || labels.includes(WITHDRAWN_LABEL);
+}
+
+// Ensure the `withdrawn` label exists with the intended colour/description,
+// creating it on first use. A 422 means it already exists → fine.
+async function ensureWithdrawnLabel(
+  client: Octokit,
+  owner: string,
+  repo: string,
+): Promise<void> {
+  try {
+    await client.rest.issues.createLabel({
+      owner,
+      repo,
+      name: WITHDRAWN_LABEL,
+      color: WITHDRAWN_LABEL_COLOR,
+      description: WITHDRAWN_LABEL_DESCRIPTION,
+    });
+  } catch (err) {
+    if ((err as { status?: number })?.status !== 422) throw err;
+  }
+}
+
 export async function withdrawIssue(
   issue: EditableIssue,
   dryRun: boolean,
 ): Promise<void> {
   if (dryRun) {
     console.log(
-      `${LOG_PREFIX} DRY_RUN — would hide issue #${issue.number} from the tool list`,
+      `${LOG_PREFIX} DRY_RUN — would label #${issue.number} '${WITHDRAWN_LABEL}' and close it (not planned)`,
     );
     return;
   }
-  // Remove it from the customer's in-tool list ONLY: add an internal marker
-  // label and leave the GitHub issue OPEN and otherwise untouched, so the team
-  // keeps working it normally. No close, no delete. GET filters these out.
+  // Withdraw = mark + close (#28). Order matters: LABEL FIRST, then close. A
+  // closed issue that missed the label would surface to the customer as
+  // "rejected" (closed not-planned → mapStatus), so we never close before the
+  // label is on. If the close then fails, the route returns 502 and the client
+  // keeps the report; a retry finds it still `received` (open) and completes.
   const { owner, repo } = repoCoords();
-  await octokit().rest.issues.addLabels({
+  const client = octokit();
+
+  await ensureWithdrawnLabel(client, owner, repo);
+  await client.rest.issues.addLabels({
     owner,
     repo,
     issue_number: issue.number,
-    labels: [CLIENT_HIDDEN_LABEL],
+    labels: [WITHDRAWN_LABEL],
   });
+  await client.rest.issues.update({
+    owner,
+    repo,
+    issue_number: issue.number,
+    state: "closed",
+    state_reason: "not_planned",
+  });
+
+  // Best-effort audit trail — non-fatal (the withdraw already succeeded).
+  try {
+    await client.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: issue.number,
+      body: `Vom Kunden im Tool zurückgezogen (${new Date().toISOString()}).`,
+    });
+  } catch (err) {
+    console.error(`${LOG_PREFIX} withdraw audit comment failed (non-fatal)`, err);
+  }
 }
 
 function buildLabels(input: CreateIssueInput): string[] {
