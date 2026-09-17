@@ -152,6 +152,71 @@ change needed for a price change on an existing product.
 
 ---
 
+## `POST /api/public/v1/signup`
+
+Runs the **open self-serve trial registration** from the CMS's own form, so the
+marketing site can host the signup UI (full name, business email, company)
+instead of deep-linking to `/signup`. On success the trial license is provisioned
+and the welcome email is sent — exactly as the on-site form does — and the
+endpoint returns `200 { ok: true }`.
+
+This endpoint only runs the **open** path: it never accepts a sales token, so a
+**sales-vetted** product returns `401` (use the demo-request deep-link instead —
+the products endpoint's `cta.kind` tells you which flow applies). It is
+CORS-locked to `PUBLIC_API_ALLOWED_ORIGINS`.
+
+### Request
+
+`Content-Type: application/json`
+
+```json
+{
+  "name": "Jane Doe",
+  "email": "jane@acme.example",
+  "company": "Acme AG",
+  "product": "cc-tmgmt"
+}
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `name` | yes | Full name. |
+| `email` | yes | Business email (basic format check). |
+| `company` | yes | Company name. |
+| `product` | no | `cc-testframework` \| `cc-tmgmt`; defaults to `cc-testframework`. |
+
+### Example
+
+```bash
+curl -X POST https://app.itsbusiness.ch/api/public/v1/signup \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Jane Doe","email":"jane@acme.example","company":"Acme AG","product":"cc-tmgmt"}'
+```
+
+```json
+{ "ok": true, "message": "Trial activated. Check your email for your download links and access code." }
+```
+
+### Responses
+
+| Status | Body | When |
+|---|---|---|
+| `200` | `{ ok: true, message }` | Trial provisioned; welcome email sent. |
+| `400` | `{ ok: false, message }` | Missing field / invalid email / invalid JSON. |
+| `401` | `{ ok: false, message }` | Product is sales-vetted → use `/demo-request`. |
+| `503` | `{ ok: false, message }` | Signup is currently disabled (`SIGNUP_ENABLED`). |
+| `500` | `{ ok: false, message }` | License provisioning failed. |
+
+All responses carry the CORS headers (for an allowlisted origin) and
+`Cache-Control: no-store`. The welcome email delivery is best-effort — a `200`
+means the license was provisioned; an email hiccup is logged, not surfaced.
+
+> Note: this creates real trial licenses and sends email. It is no more exposed
+> than the on-site `/api/signup` (which is already public), but consider adding
+> rate-limiting / a CAPTCHA on the CMS form if abuse becomes a concern.
+
+---
+
 ## Action deep-links (documented; not JSON endpoints)
 
 The CMS links these behind buttons — they are pages/redirects, **not** `fetch`
