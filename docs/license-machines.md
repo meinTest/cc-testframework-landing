@@ -71,16 +71,27 @@ Bearer-scoped and ownership-checked (the machine must belong to the calling
 license → otherwise `403`/`404`). Works on an expired license too, so a customer
 can still move their seat. Returns `{ ok: true }`.
 
-## Open follow-up: trial → paid upgrade takeover
+## Trial → paid upgrade takeover (implemented)
 
 The paid upgrade (#14) issues a **new** license/key. Activating it on a device
-that still holds the expired trial's machine (same product) would hit the
-per-product uniqueness conflict → `device-already-registered`. Before the paid
-flow goes live, the activation path needs a **same-customer takeover**: on that
-conflict, if the conflicting machine belongs to an expired/superseded license of
-the same customer + product, free it and re-activate for the new license.
-Tracked for when the paid flow is switched on; it does not affect the trial
-gating shipped here.
+that still holds the expired trial's machine (same product) hits the per-product
+uniqueness conflict. The activation path handles this automatically:
+
+- On a `device-already-registered` conflict, if the **currently activating
+  license is paid** and the conflicting machine belongs to the **same customer
+  (email) + same product**, the proxy frees the old machine and re-activates the
+  device on the new license.
+- **Only paid licenses take over.** A trial activating on a device that already
+  ran a trial of the product is **not** taken over → stays blocked. So a customer
+  can't dodge trial expiry by requesting a fresh trial, but a paying customer can
+  always activate on the device they trialed on.
+- A machine belonging to a **different** customer is never touched.
+
+"Same customer" = the normalized (trim + lowercase) `metadata.email` matches, and
+`metadata.product` matches; "paid" = the license carries `metadata.subscriptionId`
+or `metadata.kind === "paid"` (set by the paid-license provisioning). No extra
+Keygen configuration is required for takeover — it uses the admin token to list
+the fingerprint's machines, read the owning license, and free the old machine.
 
 ## Rollout
 

@@ -75,9 +75,12 @@ export async function activateDevice(
   if (!fingerprint) return fail(400, "invalid", "Missing device fingerprint");
 
   if (dryRun) {
-    // Simulate the seat-limit / already-registered branches for smoke tests.
+    // Simulate the seat-limit / already-registered / takeover branches for tests.
     if (fingerprint === "DRYRUN_SEATFULL") return fail(403, "seat-limit", "Seat limit reached", 1, 1);
     if (fingerprint === "DRYRUN_TAKEN") return fail(403, "device-already-registered", "Device already registered");
+    if (fingerprint === "DRYRUN_TAKEOVER") {
+      return { ok: true, status: "activated", machineId: "dry-run-machine-takeover", limit: 1, used: 1 };
+    }
     return { ok: true, status: "activated", machineId: "dry-run-machine", limit: 1, used: 1 };
   }
 
@@ -114,6 +117,18 @@ export async function activateDevice(
     return fail(403, "seat-limit", "Seat limit reached for this license", limit, machines.length);
   }
   if (reason === "device-already-registered") {
+    // The fingerprint is bound to another license of this product. If THIS is a
+    // paid license and the conflict is the SAME customer's own (typically their
+    // expired trial), take the device over: free the old machine and re-activate.
+    // Trial→trial re-registration is NOT taken over (anti-abuse stays intact).
+    const tookOver = await attemptTakeover(body, fingerprint, licenseId);
+    if (tookOver) {
+      const retry = await createMachine(licenseId, fingerprint);
+      if (retry.status === 201 && retry.machineId) {
+        return { ok: true, status: "activated", machineId: retry.machineId, limit, used: machines.length + 1 };
+      }
+      console.error(`${LOG_PREFIX} re-activation after takeover failed (HTTP ${retry.status})`, retry.codes);
+    }
     return fail(403, "device-already-registered", "This device is already registered to a license");
   }
   console.error(`${LOG_PREFIX} activation failed (HTTP ${create.status})`, create.codes);
@@ -231,6 +246,122 @@ async function createMachine(
   const body = await res.json().catch(() => null);
   const codes = extractErrorCodes(body);
   return { status: res.status, codes };
+}
+
+// --- trial → paid takeover --------------------------------------------------
+
+export interface LicenseIdentity {
+  email: string | null; // normalized (trim + lowercase)
+  product: string | null; // metadata.product set by our provisioning
+  isPaid: boolean; // tied to a Stripe subscription / created as a paid seat
+}
+
+/** The identity of a license from a validate-key body (current activation). */
+export function licenseIdentity(body: KeygenValidation): LicenseIdentity {
+  const md = body?.data?.attributes?.metadata ?? {};
+  return {
+    email: normalizeEmail(md.email),
+    product: asStringOrNull(md.product),
+    isPaid: asStringOrNull(md.subscriptionId) !== null || md.kind === "paid",
+  };
+}
+
+/**
+ * Whether `current` may take the device over from the `conflict` license.
+ * ONLY when the current (activating) license is PAID and it is the SAME customer
+ * (email) and SAME product — so a trial→trial re-registration is never taken over
+ * and another customer's device is never touched.
+ */
+export function canTakeover(current: LicenseIdentity, conflict: LicenseIdentity): boolean {
+  return (
+    current.isPaid &&
+    current.email !== null &&
+    conflict.email !== null &&
+    current.email === conflict.email &&
+    current.product !== null &&
+    current.product === conflict.product
+  );
+}
+
+// On a fingerprint conflict, free the same-customer machines holding it so the
+// (paid) license can re-activate. Returns true if at least one was freed.
+async function attemptTakeover(
+  body: KeygenValidation,
+  fingerprint: string,
+  currentLicenseId: string,
+): Promise<boolean> {
+  const current = licenseIdentity(body);
+  if (!current.isPaid || current.email === null) return false; // trials never take over
+
+  let conflicts: { id: string; licenseId: string | null }[];
+  try {
+    conflicts = await listMachinesByFingerprint(fingerprint);
+  } catch (e) {
+    console.error(`${LOG_PREFIX} takeover: list by fingerprint failed`, e);
+    return false;
+  }
+
+  let freed = false;
+  for (const c of conflicts) {
+    if (!c.licenseId || c.licenseId === currentLicenseId) continue;
+    let other: LicenseIdentity;
+    try {
+      other = await getLicenseIdentity(c.licenseId);
+    } catch (e) {
+      console.error(`${LOG_PREFIX} takeover: read license ${c.licenseId} failed`, e);
+      continue;
+    }
+    if (!canTakeover(current, other)) continue;
+    const res = await fetch(`${KEYGEN}/${accountId()}/machines/${encodeURIComponent(c.id)}`, {
+      method: "DELETE",
+      headers: adminHeaders(),
+    });
+    if (res.ok || res.status === 404) {
+      console.log(`${LOG_PREFIX} takeover: freed machine ${c.id} from license ${c.licenseId}`);
+      freed = true;
+    } else {
+      console.error(`${LOG_PREFIX} takeover: delete machine ${c.id} HTTP ${res.status}`);
+    }
+  }
+  return freed;
+}
+
+async function listMachinesByFingerprint(
+  fingerprint: string,
+): Promise<{ id: string; licenseId: string | null }[]> {
+  const res = await fetch(
+    `${KEYGEN}/${accountId()}/machines?limit=100&fingerprint=${encodeURIComponent(fingerprint)}`,
+    { headers: adminHeaders() },
+  );
+  if (!res.ok) throw new Error(`Keygen list machines by fingerprint HTTP ${res.status}`);
+  const body = await res.json();
+  const data: unknown[] = Array.isArray(body?.data) ? body.data : [];
+  const out: { id: string; licenseId: string | null }[] = [];
+  for (const entry of data) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const m = entry as { id?: string; relationships?: { license?: { data?: { id?: string } | null } } };
+    if (!m.id) continue;
+    out.push({ id: m.id, licenseId: m.relationships?.license?.data?.id ?? null });
+  }
+  return out;
+}
+
+async function getLicenseIdentity(licenseId: string): Promise<LicenseIdentity> {
+  const res = await fetch(`${KEYGEN}/${accountId()}/licenses/${encodeURIComponent(licenseId)}`, {
+    headers: adminHeaders(),
+  });
+  if (!res.ok) throw new Error(`Keygen get license ${licenseId} HTTP ${res.status}`);
+  const body = await res.json();
+  const md = body?.data?.attributes?.metadata ?? {};
+  return {
+    email: normalizeEmail(md.email),
+    product: asStringOrNull(md.product),
+    isPaid: asStringOrNull(md.subscriptionId) !== null || md.kind === "paid",
+  };
+}
+
+function normalizeEmail(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim().toLowerCase() : null;
 }
 
 // The license id a machine belongs to (null when the machine doesn't exist).

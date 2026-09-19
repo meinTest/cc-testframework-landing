@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import {
   classifyBaseValidity,
   classifyCreateConflict,
+  canTakeover,
+  type LicenseIdentity,
 } from "../../app/api/tmgmt/lib/machines";
 import { POST as ACTIVATE } from "../../app/api/license/activate/route";
 import { GET as LIST_MACHINES } from "../../app/api/license/machines/route";
@@ -63,6 +65,30 @@ describe("classifyCreateConflict", () => {
   });
 });
 
+describe("canTakeover (trial→paid device takeover)", () => {
+  const paid: LicenseIdentity = { email: "a@acme.test", product: "cc-tmgmt", isPaid: true };
+
+  test("paid + same customer + same product → true", () => {
+    assert.equal(canTakeover(paid, { email: "a@acme.test", product: "cc-tmgmt", isPaid: false }), true);
+  });
+  test("email match is case-insensitive (normalized upstream)", () => {
+    assert.equal(canTakeover(paid, { email: "a@acme.test", product: "cc-tmgmt", isPaid: true }), true);
+  });
+  test("current license is a TRIAL → false (no trial→trial takeover)", () => {
+    const trial: LicenseIdentity = { email: "a@acme.test", product: "cc-tmgmt", isPaid: false };
+    assert.equal(canTakeover(trial, { email: "a@acme.test", product: "cc-tmgmt", isPaid: false }), false);
+  });
+  test("different customer → false (never touch another's device)", () => {
+    assert.equal(canTakeover(paid, { email: "b@other.test", product: "cc-tmgmt", isPaid: false }), false);
+  });
+  test("different product → false", () => {
+    assert.equal(canTakeover(paid, { email: "a@acme.test", product: "cc-testframework", isPaid: false }), false);
+  });
+  test("missing emails → false", () => {
+    assert.equal(canTakeover({ email: null, product: "cc-tmgmt", isPaid: true }, { email: null, product: "cc-tmgmt", isPaid: false }), false);
+  });
+});
+
 describe("POST /api/license/activate (DRY_RUN)", () => {
   test("activates a device → 200", async () => {
     const res = await ACTIVATE(activateReq({ key: "k", fingerprint: "fp-1" }));
@@ -97,6 +123,12 @@ describe("POST /api/license/activate (DRY_RUN)", () => {
     const res = await ACTIVATE(activateReq({ key: "k", fingerprint: "DRYRUN_TAKEN" }));
     assert.equal(res.status, 403);
     assert.equal(((await res.json()) as { reason: string }).reason, "device-already-registered");
+  });
+
+  test("paid takeover re-activates the device → 200", async () => {
+    const res = await ACTIVATE(activateReq({ key: "k", fingerprint: "DRYRUN_TAKEOVER" }));
+    assert.equal(res.status, 200);
+    assert.equal(((await res.json()) as { ok: boolean }).ok, true);
   });
 });
 
