@@ -381,7 +381,7 @@ export function licenseKeyFromRequest(request: Request): string {
 // sites can't drift. `?include=policy` sideloads the policy so we can resolve the
 // license's product from it (name) when the license carries no metadata.product.
 // Returns null on any transient upstream failure (callers map that to 502).
-async function validateKey(licenseKey: string): Promise<KeygenValidation | null> {
+export async function validateKey(licenseKey: string): Promise<KeygenValidation | null> {
   const accountId = required("KEYGEN_ACCOUNT_ID");
   try {
     const response = await fetch(
@@ -461,7 +461,7 @@ function asProductId(value: unknown): ProductId | null {
   return value === "cc-tmgmt" || value === "cc-testframework" ? value : null;
 }
 
-interface KeygenValidation {
+export interface KeygenValidation {
   meta?: { valid?: boolean; code?: string; detail?: string };
   data?: {
     id?: string;
