@@ -52,8 +52,16 @@ export type ActivateResult =
 export interface DeviceInfo {
   id: string;
   fingerprint: string | null;
-  name: string | null;
+  name: string | null; // human label, e.g. the PC name the app sends
+  platform: string | null;
   createdAt: string | null;
+}
+
+// Optional device details the app may send with an activation, stored on the
+// Keygen machine so "your devices" lists can show which PC a license is on.
+export interface DeviceMeta {
+  name?: string; // e.g. hostname / PC name
+  platform?: string; // e.g. "win32", "darwin"
 }
 
 export type MachinesResult =
@@ -70,6 +78,7 @@ export async function activateDevice(
   licenseKey: string,
   fingerprint: string,
   dryRun: boolean,
+  device: DeviceMeta = {},
 ): Promise<ActivateResult> {
   if (!licenseKey) return fail(401, "invalid", "Missing license key");
   if (!fingerprint) return fail(400, "invalid", "Missing device fingerprint");
@@ -92,7 +101,7 @@ export async function activateDevice(
 
   const licenseId = body?.data?.id ?? "";
   if (!licenseId) return fail(401, "invalid", "Invalid license key");
-  const limit = policyMaxMachines(body);
+  const limit = await getPolicyMaxMachines(policyIdOf(body));
 
   // Already activated for this device? (idempotent — reinstall / restart)
   let machines: DeviceInfo[];
@@ -108,7 +117,7 @@ export async function activateDevice(
   }
 
   // New device → let Keygen enforce maxMachines + fingerprint uniqueness.
-  const create = await createMachine(licenseId, fingerprint);
+  const create = await createMachine(licenseId, fingerprint, device);
   if (create.status === 201 && create.machineId) {
     return { ok: true, status: "activated", machineId: create.machineId, limit, used: machines.length + 1 };
   }
@@ -123,7 +132,7 @@ export async function activateDevice(
     // Trial→trial re-registration is NOT taken over (anti-abuse stays intact).
     const tookOver = await attemptTakeover(body, fingerprint, licenseId);
     if (tookOver) {
-      const retry = await createMachine(licenseId, fingerprint);
+      const retry = await createMachine(licenseId, fingerprint, device);
       if (retry.status === 201 && retry.machineId) {
         return { ok: true, status: "activated", machineId: retry.machineId, limit, used: machines.length + 1 };
       }
@@ -142,7 +151,13 @@ export async function listDevices(licenseKey: string, dryRun: boolean): Promise<
       ok: true,
       limit: 1,
       devices: [
-        { id: "dry-run-machine", fingerprint: "dryrun-fp", name: "Dry Run Device", createdAt: new Date().toISOString() },
+        {
+          id: "dry-run-machine",
+          fingerprint: "dryrun-fp",
+          name: "Dry Run PC",
+          platform: "win32",
+          createdAt: new Date().toISOString(),
+        },
       ],
     };
   }
@@ -156,7 +171,7 @@ export async function listDevices(licenseKey: string, dryRun: boolean): Promise<
   if (!licenseId) return { ok: false, status: 401, reason: "invalid", message: "Invalid license key" };
   try {
     const devices = await listMachinesByLicense(licenseId);
-    return { ok: true, devices, limit: policyMaxMachines(body) };
+    return { ok: true, devices, limit: await getPolicyMaxMachines(policyIdOf(body)) };
   } catch (e) {
     console.error(`${LOG_PREFIX} list machines failed`, e);
     return { ok: false, status: 502, reason: "unavailable", message: "Could not read device activations" };
@@ -218,6 +233,7 @@ async function listMachinesByLicense(licenseId: string): Promise<DeviceInfo[]> {
       id: m.id,
       fingerprint: asStringOrNull(m.attributes?.fingerprint),
       name: asStringOrNull(m.attributes?.name),
+      platform: asStringOrNull(m.attributes?.platform),
       createdAt: asStringOrNull(m.attributes?.created),
     });
   }
@@ -227,14 +243,18 @@ async function listMachinesByLicense(licenseId: string): Promise<DeviceInfo[]> {
 async function createMachine(
   licenseId: string,
   fingerprint: string,
+  device: DeviceMeta = {},
 ): Promise<{ status: number; machineId?: string; codes: string[] }> {
+  const attributes: Record<string, unknown> = { fingerprint };
+  if (device.name) attributes.name = device.name;
+  if (device.platform) attributes.platform = device.platform;
   const res = await fetch(`${KEYGEN}/${accountId()}/machines`, {
     method: "POST",
     headers: adminHeaders(),
     body: JSON.stringify({
       data: {
         type: "machines",
-        attributes: { fingerprint },
+        attributes,
         relationships: { license: { data: { type: "licenses", id: licenseId } } },
       },
     }),
@@ -459,12 +479,27 @@ function extractErrorCodes(body: unknown): string[] {
   return codes;
 }
 
-function policyMaxMachines(body: KeygenValidation): number | null {
-  const polId = body?.data?.relationships?.policy?.data?.id;
-  if (!polId || !Array.isArray(body.included)) return null;
-  const pol = body.included.find((x) => x?.type === "policies" && x.id === polId);
-  const max = pol?.attributes?.maxMachines;
-  return typeof max === "number" ? max : null;
+function policyIdOf(body: KeygenValidation): string | null {
+  return body?.data?.relationships?.policy?.data?.id ?? null;
+}
+
+// Authoritative machine limit for display (the validate-key sideload doesn't
+// reliably carry maxMachines, so read the policy directly). Best-effort: null on
+// any failure — enforcement is Keygen's job, this is only for "N of N".
+async function getPolicyMaxMachines(policyId: string | null): Promise<number | null> {
+  if (!policyId) return null;
+  try {
+    const res = await fetch(`${KEYGEN}/${accountId()}/policies/${encodeURIComponent(policyId)}`, {
+      headers: adminHeaders(),
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const max = body?.data?.attributes?.maxMachines;
+    return typeof max === "number" ? max : null;
+  } catch (e) {
+    console.error(`${LOG_PREFIX} read policy ${policyId} failed (non-fatal)`, e);
+    return null;
+  }
 }
 
 function fail(

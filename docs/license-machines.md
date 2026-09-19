@@ -32,6 +32,11 @@ The app sends a **stable, PII-free** fingerprint (e.g. a hash of hostname +
 determined user who deliberately changes the fingerprint (VM, OS reinstall,
 spoofing) can bypass it; casual re-trials are reliably blocked.
 
+Optionally the app may also send a **device name** (e.g. the PC name) and
+**platform**, stored on the machine so the "your devices" list is human-readable:
+headers `X-Device-Name` / `X-Device-Platform`, or body `{ "name": "…",
+"platform": "…" }`. Both optional.
+
 ## `POST /api/license/activate`
 
 Binds the calling device to the license. Idempotent — re-activating a known
@@ -61,8 +66,11 @@ The devices currently bound to the calling license (for an in-app / portal
 "your devices" view). `Authorization: Bearer <key>`.
 
 ```json
-{ "ok": true, "limit": 1, "devices": [ { "id": "…", "fingerprint": "…", "name": null, "createdAt": "ISO" } ] }
+{ "ok": true, "limit": 1, "devices": [ { "id": "…", "fingerprint": "…", "name": "Jane-PC", "platform": "win32", "createdAt": "ISO" } ] }
 ```
+
+`limit` is the policy's `maxMachines` (for a "N of N" display); `name` is the PC
+name the app sent on activation (null if none).
 
 ## `DELETE /api/license/machines/<machineId>`
 

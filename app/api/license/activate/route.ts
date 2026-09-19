@@ -16,12 +16,15 @@ export async function POST(request: Request) {
   const dryRun = process.env.DRY_RUN === "true";
   const licenseKey = licenseKeyFromRequest(request);
 
-  const fingerprint = await fingerprintFromRequest(request);
-  if (!fingerprint) {
+  const device = await deviceFromRequest(request);
+  if (!device.fingerprint) {
     return json(400, { ok: false, reason: "missing-fingerprint", message: "Missing device fingerprint" });
   }
 
-  const result = await activateDevice(licenseKey, fingerprint, dryRun);
+  const result = await activateDevice(licenseKey, device.fingerprint, dryRun, {
+    name: device.name,
+    platform: device.platform,
+  });
   if (result.ok) {
     return json(200, {
       ok: true,
@@ -40,15 +43,31 @@ export async function POST(request: Request) {
   });
 }
 
-async function fingerprintFromRequest(request: Request): Promise<string> {
-  const header = request.headers.get("x-device-fingerprint");
-  if (header && header.trim()) return header.trim();
+// Device details: fingerprint (required) plus optional name (PC name) / platform.
+// Each may come from a header (X-Device-Fingerprint / -Name / -Platform) or the
+// JSON body; the header wins. The body is parsed once.
+async function deviceFromRequest(
+  request: Request,
+): Promise<{ fingerprint: string; name?: string; platform?: string }> {
+  let body: { fingerprint?: unknown; name?: unknown; platform?: unknown } = {};
   try {
-    const body = (await request.json()) as { fingerprint?: unknown };
-    return typeof body?.fingerprint === "string" ? body.fingerprint.trim() : "";
+    body = (await request.json()) as typeof body;
   } catch {
-    return "";
+    /* no/invalid body → headers only */
   }
+  const pick = (headerName: string, bodyValue: unknown): string => {
+    const h = request.headers.get(headerName);
+    if (h && h.trim()) return h.trim();
+    return typeof bodyValue === "string" ? bodyValue.trim() : "";
+  };
+  const fingerprint = pick("x-device-fingerprint", body.fingerprint);
+  const name = pick("x-device-name", body.name);
+  const platform = pick("x-device-platform", body.platform);
+  return {
+    fingerprint,
+    ...(name ? { name } : {}),
+    ...(platform ? { platform } : {}),
+  };
 }
 
 function json(status: number, payload: unknown) {
