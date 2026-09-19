@@ -259,11 +259,48 @@ export interface LicenseIdentity {
 /** The identity of a license from a validate-key body (current activation). */
 export function licenseIdentity(body: KeygenValidation): LicenseIdentity {
   const md = body?.data?.attributes?.metadata ?? {};
+  const policy = extractPolicyRef(body);
   return {
     email: normalizeEmail(md.email),
-    product: asStringOrNull(md.product),
-    isPaid: asStringOrNull(md.subscriptionId) !== null || md.kind === "paid",
+    // Product from our own metadata, else resolved from the policy (licenses
+    // created straight off a product policy carry no metadata.product).
+    product: asStringOrNull(md.product) ?? productFromPolicy(policy),
+    // Paid when tied to a Stripe subscription, created as a paid seat, OR simply
+    // sitting on a paid policy (a license created directly off the paid policy
+    // has neither subscriptionId nor kind).
+    isPaid:
+      asStringOrNull(md.subscriptionId) !== null ||
+      md.kind === "paid" ||
+      isPaidPolicy(policy),
   };
+}
+
+// Policy id (from relationships) + name (sideloaded via ?include=policy).
+function extractPolicyRef(body: KeygenValidation): { id: string | null; name: string | null } {
+  const id = body?.data?.relationships?.policy?.data?.id ?? null;
+  let name: string | null = null;
+  if (id && Array.isArray(body.included)) {
+    const p = body.included.find((x) => x?.type === "policies" && x.id === id);
+    if (p && typeof p.attributes?.name === "string") name = p.attributes.name;
+  }
+  return { id, name };
+}
+
+function productFromPolicy(policy: { id: string | null; name: string | null }): string | null {
+  const framework = [process.env.KEYGEN_TRIAL_POLICY_ID, process.env.KEYGEN_PAID_POLICY_ID];
+  const tmgmt = [process.env.KEYGEN_TMGMT_TRIAL_POLICY_ID, process.env.KEYGEN_TMGMT_PAID_POLICY_ID];
+  if (policy.id && framework.includes(policy.id)) return "cc-testframework";
+  if (policy.id && tmgmt.includes(policy.id)) return "cc-tmgmt";
+  const name = (policy.name ?? "").toLowerCase();
+  if (name.includes("cc-tmgmt")) return "cc-tmgmt";
+  if (name.includes("cc-testframework")) return "cc-testframework";
+  return null;
+}
+
+function isPaidPolicy(policy: { id: string | null; name: string | null }): boolean {
+  const paidIds = [process.env.KEYGEN_PAID_POLICY_ID, process.env.KEYGEN_TMGMT_PAID_POLICY_ID];
+  if (policy.id && paidIds.includes(policy.id)) return true;
+  return (policy.name ?? "").toLowerCase().includes("paid");
 }
 
 /**
@@ -347,17 +384,17 @@ async function listMachinesByFingerprint(
 }
 
 async function getLicenseIdentity(licenseId: string): Promise<LicenseIdentity> {
-  const res = await fetch(`${KEYGEN}/${accountId()}/licenses/${encodeURIComponent(licenseId)}`, {
-    headers: adminHeaders(),
-  });
+  // include=policy so product can be resolved from the policy when the license
+  // carries no metadata.product (e.g. hand-created in Keygen).
+  const res = await fetch(
+    `${KEYGEN}/${accountId()}/licenses/${encodeURIComponent(licenseId)}?include=policy`,
+    { headers: adminHeaders() },
+  );
   if (!res.ok) throw new Error(`Keygen get license ${licenseId} HTTP ${res.status}`);
-  const body = await res.json();
-  const md = body?.data?.attributes?.metadata ?? {};
-  return {
-    email: normalizeEmail(md.email),
-    product: asStringOrNull(md.product),
-    isPaid: asStringOrNull(md.subscriptionId) !== null || md.kind === "paid",
-  };
+  const body = (await res.json()) as KeygenValidation;
+  // getLicenseIdentity describes a CONFLICTING license; canTakeover only reads its
+  // email + product (never its isPaid), so isPaid here is informational.
+  return licenseIdentity(body);
 }
 
 function normalizeEmail(value: unknown): string | null {

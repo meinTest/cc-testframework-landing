@@ -5,6 +5,7 @@ import {
   classifyBaseValidity,
   classifyCreateConflict,
   canTakeover,
+  licenseIdentity,
   type LicenseIdentity,
 } from "../../app/api/tmgmt/lib/machines";
 import { POST as ACTIVATE } from "../../app/api/license/activate/route";
@@ -86,6 +87,34 @@ describe("canTakeover (trial→paid device takeover)", () => {
   });
   test("missing emails → false", () => {
     assert.equal(canTakeover({ email: null, product: "cc-tmgmt", isPaid: true }, { email: null, product: "cc-tmgmt", isPaid: false }), false);
+  });
+});
+
+describe("licenseIdentity (paid/product resolved from policy)", () => {
+  function body(metadata: Record<string, unknown>, policyName: string): Parameters<typeof licenseIdentity>[0] {
+    return {
+      meta: { valid: true },
+      data: { id: "lic1", attributes: { metadata }, relationships: { policy: { data: { id: "p1" } } } },
+      included: [{ type: "policies", id: "p1", attributes: { name: policyName } }],
+    };
+  }
+
+  test("paid detected from the policy name when metadata has no kind/subscription", () => {
+    const id = licenseIdentity(body({ email: "A@Acme.test", product: "cc-tmgmt" }, "cc-tmgmt Paid"));
+    assert.equal(id.isPaid, true);
+    assert.equal(id.email, "a@acme.test"); // normalized
+    assert.equal(id.product, "cc-tmgmt");
+  });
+
+  test("trial policy → not paid; product resolved from the policy name", () => {
+    const id = licenseIdentity(body({ email: "a@acme.test" }, "cc-tmgmt Trial")); // no metadata.product
+    assert.equal(id.isPaid, false);
+    assert.equal(id.product, "cc-tmgmt"); // resolved from policy name
+  });
+
+  test("subscriptionId in metadata → paid regardless of policy", () => {
+    const id = licenseIdentity(body({ email: "a@acme.test", subscriptionId: "sub_1" }, "whatever"));
+    assert.equal(id.isPaid, true);
   });
 });
 
