@@ -2,17 +2,28 @@ import {
   createTrialLicense,
   deleteLicense,
   findPendingLicenseByToken,
+  type KeygenLicense,
 } from "./keygen";
 import { sendWelcomeEmail, sendTmgmtWelcome, notifySupport } from "./resend";
 import { sanitizeTrialDays } from "./trial";
-import { resolveProduct, isOffered, isVetted, type ProductId } from "../../../products";
+import {
+  resolveProduct,
+  isOffered,
+  isVetted,
+  productLabel,
+  type ProductId,
+} from "../../../products";
+import { isPlanId, planProducts } from "../../../plans";
+import { CURRENCIES, type BillingCycle, type Currency } from "../../../pricing";
 
 // Shared signup core, used by the on-site /api/signup route and the CORS-enabled
-// public /api/public/v1/signup route (the CMS posts its own form here). Handles
-// both the sales-vetted token path (product + trial length from the token) and
-// the open self-serve path (product from the request, only when the product's
-// vetting is OFF). Provisions the Keygen trial license, sends the welcome mail,
-// notifies support and consumes the pending token — then returns a status + body.
+// public /api/public/v1/signup route (the CMS posts its own form here).
+//
+// A signup provisions a trial for a SET of products (a plan): "Starter" delivers
+// one product, "Professional" delivers both. Each product gets its own trial
+// license and its own welcome mail. The sales-vetted token path stays
+// single-product (the token defines it); the open self-serve path takes the
+// product set from the request and only allows products whose vetting is OFF.
 
 const LOG_PREFIX = "[signup]";
 
@@ -20,10 +31,15 @@ export interface SignupInput {
   name: string;
   email: string;
   company: string;
-  // Sales token: drives the vetted path. "" → open self-serve.
+  // Sales token: drives the vetted path (single product from the token).
+  // "" → open self-serve, which uses `products`.
   token: string;
-  // Only used on the open path; the vetted path takes the product from the token.
-  product: ProductId;
+  // Resolved product set for the open path (from `plan`, or a single `product`).
+  products: ProductId[];
+  // Billing-cycle/currency preference from the CMS box — stored on the license(s)
+  // so the later trial→paid upgrade can pre-select them. Optional.
+  cycle?: BillingCycle;
+  currency?: Currency;
 }
 
 export interface SignupOutcome {
@@ -37,12 +53,17 @@ interface SignupPayload {
   company?: unknown;
   token?: unknown;
   product?: unknown;
+  plan?: unknown;
+  cycle?: unknown;
+  currency?: unknown;
 }
 
 /**
  * Validate the signup fields shared by both routes. Token is optional (the public
- * endpoint never sends one). Product is resolved leniently (defaults to the
- * framework) and re-checked against isOffered/isVetted on the open path.
+ * endpoint never sends one). The product set comes from `plan` when present
+ * (starter-framework | starter-tmt | professional), else from a single `product`
+ * (defaults to the framework) — both re-checked against isOffered/isVetted on the
+ * open path. cycle/currency are optional preferences (invalid values are ignored).
  */
 export function validateSignupInput(
   payload: SignupPayload,
@@ -51,7 +72,6 @@ export function validateSignupInput(
   const email = stringField(payload.email);
   const company = stringField(payload.company);
   const token = stringField(payload.token);
-  const product = resolveProduct(payload.product);
 
   if (!name) return { error: "Missing field: name" };
   if (!email) return { error: "Missing field: email" };
@@ -60,7 +80,24 @@ export function validateSignupInput(
     return { error: "Invalid email address" };
   }
 
-  return { value: { name, email, company, token, product } };
+  let products: ProductId[];
+  if (payload.plan !== undefined && payload.plan !== null && payload.plan !== "") {
+    if (!isPlanId(payload.plan)) {
+      return { error: `Unknown plan: ${String(payload.plan)}` };
+    }
+    products = planProducts(payload.plan);
+  } else {
+    products = [resolveProduct(payload.product)];
+  }
+
+  const cycle: BillingCycle | undefined =
+    payload.cycle === "monthly" || payload.cycle === "yearly" ? payload.cycle : undefined;
+  const currencyRaw = typeof payload.currency === "string" ? payload.currency.toUpperCase() : "";
+  const currency = CURRENCIES.includes(currencyRaw as Currency)
+    ? (currencyRaw as Currency)
+    : undefined;
+
+  return { value: { name, email, company, token, products, cycle, currency } };
 }
 
 export async function performSignup(
@@ -69,15 +106,13 @@ export async function performSignup(
 ): Promise<SignupOutcome> {
   const { origin, dryRun } = opts;
 
-  let pendingLicenseId: string | null = null;
-  // A token is only ever issued by sales, so its presence drives the vetted path
-  // (product from the token). Without a token we allow open self-serve — but only
-  // for a product whose vetting is OFF; a vetted product still requires a token.
-  let product: ProductId;
-  // Sales-chosen trial length (#11); undefined on the open path → policy default.
+  // Resolve the effective product set + trial length + pending token.
+  let products: ProductId[];
   let trialDays: number | undefined;
+  let pendingLicenseId: string | null = null;
 
   if (input.token) {
+    // Sales-vetted path: single product from the token.
     try {
       const pending = await findPendingLicenseByToken(input.token, dryRun);
       if (!pending) {
@@ -87,47 +122,124 @@ export async function performSignup(
         return err(401, "Your signup link has expired. Please request a fresh demo at /demo-request.");
       }
       pendingLicenseId = pending.id;
-      product = resolveProduct(pending.metadata.product);
+      products = [resolveProduct(pending.metadata.product)];
       trialDays = sanitizeTrialDays(pending.metadata.trialDays);
     } catch (e) {
       console.error(`${LOG_PREFIX} token lookup failed`, e);
       return err(500, "Could not validate your signup token. Please try again or contact support@itsbusiness.ch.");
     }
   } else {
-    product = input.product;
-    if (!isOffered(product)) {
-      return err(400, "This product is not available.");
-    }
-    if (isVetted(product)) {
-      return err(401, "Token required. Please request a demo at /demo-request to receive a personalized signup link.");
+    // Open self-serve path: the requested plan's product set. Every product must
+    // be offered and NOT sales-vetted.
+    products = dedupe(input.products);
+    if (products.length === 0) return err(400, "This product is not available.");
+    for (const product of products) {
+      if (!isOffered(product)) {
+        return err(400, "This product is not available.");
+      }
+      if (isVetted(product)) {
+        return err(401, "Token required. Please request a demo at /demo-request to receive a personalized signup link.");
+      }
     }
   }
 
   console.log(`${LOG_PREFIX} received`, {
     email: input.email,
     company: input.company,
-    product,
-    vetted: isVetted(product),
+    products,
+    cycle: input.cycle,
     tokenPrefix: input.token ? `${input.token.slice(0, 8)}…` : null,
     dryRun,
     at: new Date().toISOString(),
   });
 
-  let license;
-  try {
-    license = await createTrialLicense(
-      { name: input.name, email: input.email, company: input.company, product, trialDays },
-      dryRun,
-    );
-  } catch (e) {
-    console.error(`${LOG_PREFIX} keygen step failed`, e);
-    return err(500, "Could not provision your trial license. Please contact support@itsbusiness.ch.");
+  // Provision all licenses first, atomically: if any create fails, roll back the
+  // ones already created and fail — so a Professional signup never lands the
+  // customer with a half-provisioned account.
+  const created: { product: ProductId; license: KeygenLicense }[] = [];
+  for (const product of products) {
+    try {
+      const license = await createTrialLicense(
+        {
+          name: input.name,
+          email: input.email,
+          company: input.company,
+          product,
+          trialDays,
+          preferredCycle: input.cycle,
+          preferredCurrency: input.currency,
+        },
+        dryRun,
+      );
+      created.push({ product, license });
+    } catch (e) {
+      console.error(`${LOG_PREFIX} keygen step failed for ${product} — rolling back`, e);
+      for (const c of created) {
+        try {
+          await deleteLicense(c.license.id, dryRun);
+        } catch (rollbackErr) {
+          console.error(`${LOG_PREFIX} rollback failed for ${c.license.id} (non-fatal)`, rollbackErr);
+        }
+      }
+      return err(500, "Could not provision your trial license. Please contact support@itsbusiness.ch.");
+    }
   }
 
-  if (product === "cc-tmgmt") {
-    // cc-tmgmt: no GitHub invite. The license key is the access code; the welcome
-    // mail carries it plus the gated per-OS download links.
+  // Deliver each product's welcome mail (best-effort — the license is valid
+  // regardless; an email hiccup is logged, not surfaced).
+  for (const { product, license } of created) {
+    await sendWelcome(product, license, input, origin);
+  }
+
+  // Notify support per provisioned product (non-fatal).
+  for (const { product, license } of created) {
     try {
+      await notifySupport(
+        {
+          customerName: input.name,
+          customerEmail: input.email,
+          company: input.company,
+          licenseId: license.id,
+          licenseKey: license.key,
+          product,
+        },
+        dryRun,
+      );
+    } catch (e) {
+      console.error(`${LOG_PREFIX} support notify failed (non-fatal)`, e);
+    }
+  }
+
+  // Consume the single-use sales token (vetted path only).
+  if (pendingLicenseId) {
+    try {
+      await deleteLicense(pendingLicenseId, dryRun);
+      console.log(`${LOG_PREFIX} consumed pending license ${pendingLicenseId}`);
+    } catch (e) {
+      console.error(`${LOG_PREFIX} pending license consume failed (non-fatal)`, e);
+    }
+  }
+
+  console.log(`${LOG_PREFIX} completed`, {
+    licenseIds: created.map((c) => c.license.id),
+    products,
+    dryRun,
+  });
+
+  return { status: 200, body: { ok: true, message: successMessage(products, dryRun) } };
+}
+
+async function sendWelcome(
+  product: ProductId,
+  license: KeygenLicense,
+  input: SignupInput,
+  origin: string,
+): Promise<void> {
+  const dryRun = process.env.DRY_RUN === "true";
+  try {
+    if (product === "cc-tmgmt") {
+      // cc-tmgmt: the license key is the access code; the welcome mail carries it
+      // plus the gated per-OS download links. No GitHub invite.
       await sendTmgmtWelcome(
         {
           toEmail: input.email,
@@ -139,15 +251,13 @@ export async function performSignup(
         },
         dryRun,
       );
-    } catch (e) {
-      console.error(`${LOG_PREFIX} cc-tmgmt welcome failed — license is valid, customer needs the access code via manual outreach`, e);
-    }
-  } else {
-    const quickstartUrlEn =
-      process.env.QUICKSTART_URL_EN ?? "https://meintest.github.io/cc-testframework/en/quickstart/";
-    const quickstartUrlDe =
-      process.env.QUICKSTART_URL_DE ?? "https://meintest.github.io/cc-testframework/de/quickstart/";
-    try {
+    } else {
+      // cc-testframework: installs from the license-brokered npm registry with the
+      // same key — no GitHub account required.
+      const quickstartUrlEn =
+        process.env.QUICKSTART_URL_EN ?? "https://meintest.github.io/cc-testframework/en/quickstart/";
+      const quickstartUrlDe =
+        process.env.QUICKSTART_URL_DE ?? "https://meintest.github.io/cc-testframework/de/quickstart/";
       await sendWelcomeEmail(
         {
           toEmail: input.email,
@@ -161,54 +271,27 @@ export async function performSignup(
         },
         dryRun,
       );
-    } catch (e) {
-      console.error(`${LOG_PREFIX} welcome email failed — license is valid, customer needs manual outreach`, e);
     }
-  }
-
-  try {
-    await notifySupport(
-      {
-        customerName: input.name,
-        customerEmail: input.email,
-        company: input.company,
-        licenseId: license.id,
-        licenseKey: license.key,
-        product,
-      },
-      dryRun,
-    );
   } catch (e) {
-    console.error(`${LOG_PREFIX} support notify failed (non-fatal)`, e);
+    console.error(`${LOG_PREFIX} welcome mail failed for ${product} — license is valid, customer needs manual outreach`, e);
   }
+}
 
-  if (pendingLicenseId) {
-    try {
-      await deleteLicense(pendingLicenseId, dryRun);
-      console.log(`${LOG_PREFIX} consumed pending license ${pendingLicenseId}`);
-    } catch (e) {
-      console.error(`${LOG_PREFIX} pending license consume failed (non-fatal)`, e);
-    }
+export function successMessage(products: ProductId[], dryRun: boolean): string {
+  if (dryRun) {
+    return "Dry-run completed. Check Vercel function logs for the simulated calls.";
   }
+  if (products.length > 1) {
+    const labels = products.map(productLabel).join(" and ");
+    return `Trial activated. Check your email for your setup instructions for ${labels}.`;
+  }
+  return products[0] === "cc-tmgmt"
+    ? "Trial activated. Check your email for your download links and access code."
+    : "Trial activated. Check your email for your license key and setup instructions.";
+}
 
-  console.log(`${LOG_PREFIX} completed`, {
-    licenseId: license.id,
-    product,
-    vetted: isVetted(product),
-    dryRun,
-  });
-
-  return {
-    status: 200,
-    body: {
-      ok: true,
-      message: dryRun
-        ? "Dry-run completed. Check Vercel function logs for the simulated calls."
-        : product === "cc-tmgmt"
-          ? "Trial activated. Check your email for your download links and access code."
-          : "Trial activated. Check your email for your license key and setup instructions.",
-    },
-  };
+function dedupe(products: ProductId[]): ProductId[] {
+  return [...new Set(products)];
 }
 
 function err(status: number, message: string): SignupOutcome {

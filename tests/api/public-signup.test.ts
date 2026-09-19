@@ -107,3 +107,23 @@ describe("POST /api/public/v1/signup", () => {
     assert.equal(res.headers.get("access-control-allow-methods"), "GET, OPTIONS");
   });
 });
+
+describe("POST /api/public/v1/signup — plans (route level, DRY_RUN)", () => {
+  test("plan=professional → 200", async () => {
+    const res = await POST(req({ ...VALID, plan: "professional", cycle: "yearly" }));
+    assert.equal(res.status, 200);
+    assert.equal(((await res.json()) as { ok: boolean }).ok, true);
+  });
+
+  test("plan=starter-tmt → 200", async () => {
+    const res = await POST(req({ ...VALID, plan: "starter-tmt" }));
+    assert.equal(res.status, 200);
+  });
+
+  test("unknown plan → 400", async () => {
+    const res = await POST(req({ ...VALID, plan: "enterprise" }));
+    assert.equal(res.status, 400);
+    const body = (await res.json()) as { message: string };
+    assert.match(body.message, /unknown plan/i);
+  });
+});

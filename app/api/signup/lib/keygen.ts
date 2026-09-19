@@ -1,4 +1,5 @@
 import type { ProductId } from "../../../products";
+import type { BillingCycle, Currency } from "../../../pricing";
 import { DEFAULT_TRIAL_DAYS } from "./trial";
 
 export interface KeygenLicense {
@@ -21,6 +22,10 @@ interface CreateLicenseInput {
   // fixed to now + trialDays, overriding the Keygen policy's default duration.
   // Omitted (open self-serve / demo) → the policy default applies.
   trialDays?: number;
+  // Billing cycle/currency the customer picked in the CMS box — stored as a
+  // preference so the later trial→paid upgrade can pre-select them. Optional.
+  preferredCycle?: BillingCycle;
+  preferredCurrency?: Currency;
 }
 
 const LOG_PREFIX = "[signup][keygen]";
@@ -75,6 +80,8 @@ export async function createTrialLicense(
               customerName: input.name,
               company: input.company,
               ...(input.trialDays != null ? { trialDays: input.trialDays } : {}),
+              ...(input.preferredCycle ? { preferredCycle: input.preferredCycle } : {}),
+              ...(input.preferredCurrency ? { preferredCurrency: input.preferredCurrency } : {}),
               signupAt: new Date().toISOString(),
             },
           },

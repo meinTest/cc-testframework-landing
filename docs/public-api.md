@@ -174,7 +174,8 @@ CORS-locked to `PUBLIC_API_ALLOWED_ORIGINS`.
   "name": "Jane Doe",
   "email": "jane@acme.example",
   "company": "Acme AG",
-  "product": "cc-tmgmt"
+  "plan": "professional",
+  "cycle": "yearly"
 }
 ```
 
@@ -183,18 +184,37 @@ CORS-locked to `PUBLIC_API_ALLOWED_ORIGINS`.
 | `name` | yes | Full name. |
 | `email` | yes | Business email (basic format check). |
 | `company` | yes | Company name. |
-| `product` | no | `cc-testframework` \| `cc-tmgmt`; defaults to `cc-testframework`. |
+| `plan` | no* | Marketing plan (box) — see the table below. Provisions one trial per product in the plan and sends each product's welcome mail. |
+| `product` | no* | Single product (`cc-testframework` \| `cc-tmgmt`), for the one-product case. Defaults to `cc-testframework`. Ignored when `plan` is set. |
+| `cycle` | no | `monthly` \| `yearly` — the customer's preference from the box, stored on the license so the later trial→paid upgrade pre-selects it. No charge now. |
+| `currency` | no | `CHF` \| `EUR` \| `USD` — same, stored as a preference. |
+
+*Send either `plan` (preferred, for the pricing boxes) or `product`. With neither, it defaults to the framework.
+
+### Plans (which products a box delivers)
+
+| `plan` | Delivers | Welcome mail(s) |
+|---|---|---|
+| `starter-framework` | CC-Testframework | Framework (npm setup) |
+| `starter-tmt` | CC Test Management | TMT (app download + access code) |
+| `professional` | both | both |
+
+A trial is free — `cycle`/`currency` are only a stored preference for the later
+paid upgrade (done in-app), which is where any price applies. "Professional"
+provisions a separate license per product (two keys, two mails); a partial
+provisioning failure rolls back and returns `500`.
 
 ### Example
 
 ```bash
+# Professional box, yearly preference
 curl -X POST https://app.itsbusiness.ch/api/public/v1/signup \
   -H "Content-Type: application/json" \
-  -d '{"name":"Jane Doe","email":"jane@acme.example","company":"Acme AG","product":"cc-tmgmt"}'
+  -d '{"name":"Jane Doe","email":"jane@acme.example","company":"Acme AG","plan":"professional","cycle":"yearly"}'
 ```
 
 ```json
-{ "ok": true, "message": "Trial activated. Check your email for your download links and access code." }
+{ "ok": true, "message": "Trial activated. Check your email for your setup instructions for CC Test Management and CC-Testframework." }
 ```
 
 ### Responses
