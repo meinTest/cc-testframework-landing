@@ -6,7 +6,9 @@ import {
   classifyCreateConflict,
   canTakeover,
   licenseIdentity,
+  machineMetaPatch,
   type LicenseIdentity,
+  type DeviceInfo,
 } from "../../app/api/tmgmt/lib/machines";
 import { POST as ACTIVATE } from "../../app/api/license/activate/route";
 import { GET as LIST_MACHINES } from "../../app/api/license/machines/route";
@@ -115,6 +117,24 @@ describe("licenseIdentity (paid/product resolved from policy)", () => {
   test("subscriptionId in metadata → paid regardless of policy", () => {
     const id = licenseIdentity(body({ email: "a@acme.test", subscriptionId: "sub_1" }, "whatever"));
     assert.equal(id.isPaid, true);
+  });
+});
+
+describe("machineMetaPatch (update name/platform on re-activation)", () => {
+  const existing: DeviceInfo = {
+    id: "m1", fingerprint: "fp", name: "Old-PC", platform: "win32", createdAt: null,
+  };
+  test("renamed PC → patch name only", () => {
+    assert.deepEqual(machineMetaPatch(existing, { name: "New-PC" }), { name: "New-PC" });
+  });
+  test("unchanged name → empty patch", () => {
+    assert.deepEqual(machineMetaPatch(existing, { name: "Old-PC" }), {});
+  });
+  test("no name sent → empty patch (never clears)", () => {
+    assert.deepEqual(machineMetaPatch(existing, {}), {});
+  });
+  test("changed platform included", () => {
+    assert.deepEqual(machineMetaPatch(existing, { platform: "darwin" }), { platform: "darwin" });
   });
 });
 

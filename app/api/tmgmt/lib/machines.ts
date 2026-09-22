@@ -113,6 +113,10 @@ export async function activateDevice(
   }
   const existing = machines.find((m) => m.fingerprint === fingerprint);
   if (existing) {
+    // Keep the stored PC name / platform current if the app now reports a
+    // different one (e.g. the machine was renamed). Best-effort, non-fatal.
+    const patch = machineMetaPatch(existing, device);
+    if (Object.keys(patch).length > 0) await updateMachine(existing.id, patch);
     return { ok: true, status: "already-active", machineId: existing.id, limit, used: machines.length };
   }
 
@@ -419,6 +423,28 @@ async function getLicenseIdentity(licenseId: string): Promise<LicenseIdentity> {
 
 function normalizeEmail(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim().toLowerCase() : null;
+}
+
+/** The attributes to PATCH on a known machine when the app reports a new
+ * name/platform. Only changed, non-empty fields are included. */
+export function machineMetaPatch(existing: DeviceInfo, device: DeviceMeta): Record<string, string> {
+  const patch: Record<string, string> = {};
+  if (device.name && device.name !== existing.name) patch.name = device.name;
+  if (device.platform && device.platform !== existing.platform) patch.platform = device.platform;
+  return patch;
+}
+
+async function updateMachine(machineId: string, attributes: Record<string, string>): Promise<void> {
+  try {
+    const res = await fetch(`${KEYGEN}/${accountId()}/machines/${encodeURIComponent(machineId)}`, {
+      method: "PATCH",
+      headers: adminHeaders(),
+      body: JSON.stringify({ data: { type: "machines", id: machineId, attributes } }),
+    });
+    if (!res.ok) console.error(`${LOG_PREFIX} update machine ${machineId} HTTP ${res.status}`);
+  } catch (e) {
+    console.error(`${LOG_PREFIX} update machine ${machineId} failed (non-fatal)`, e);
+  }
 }
 
 // The license id a machine belongs to (null when the machine doesn't exist).
