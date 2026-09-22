@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   checkEntitlement,
   checkEntitlementCached,
+  checkQaEntitlement,
   licenseKeyFromRequest,
   ENTITLED_PRODUCTS,
 } from "./entitlement";
@@ -38,7 +39,11 @@ const TARGET_OSES: TargetOs[] = ["win", "mac", "linux"];
 
 export async function handleDownload(request: Request): Promise<Response> {
   const dryRun = process.env.DRY_RUN === "true";
-  const os = new URL(request.url).searchParams.get("os");
+  const params = new URL(request.url).searchParams;
+  const os = params.get("os");
+  // ?channel=qa serves the internal QA installer (same entitlement gate as the
+  // QA update feed). Anything else (incl. absent) → the customer channel, as today.
+  const channel = params.get("channel") === "qa" ? "qa" : "stable";
 
   if (!os || !TARGET_OSES.includes(os as TargetOs)) {
     return new NextResponse("Query param 'os' must be one of: win, mac, linux", {
@@ -47,29 +52,37 @@ export async function handleDownload(request: Request): Promise<Response> {
     });
   }
 
-  const entitlement = await checkEntitlement(licenseKeyFromRequest(request), dryRun);
-  if (!entitlement.ok) {
-    return new NextResponse(entitlement.reason, {
-      status: entitlement.status,
-      headers: noStore(),
-    });
+  const licenseKey = licenseKeyFromRequest(request);
+  if (channel === "qa") {
+    const qa = await checkQaEntitlement(licenseKey, dryRun);
+    if (!qa.ok) {
+      return NextResponse.json({ error: qa.error }, { status: qa.status, headers: noStore() });
+    }
+  } else {
+    const entitlement = await checkEntitlement(licenseKey, dryRun);
+    if (!entitlement.ok) {
+      return new NextResponse(entitlement.reason, {
+        status: entitlement.status,
+        headers: noStore(),
+      });
+    }
   }
 
   try {
-    const assetName = await resolveOsAssetName(os as TargetOs, dryRun);
+    const assetName = await resolveOsAssetName(os as TargetOs, dryRun, channel);
     if (!assetName) {
       return new NextResponse("No download available for this platform", {
         status: 404,
         headers: noStore(),
       });
     }
-    const url = await getAssetRedirectUrl(assetName, dryRun);
+    const url = await getAssetRedirectUrl(assetName, dryRun, channel);
     if (!url) {
       return new NextResponse("Not found", { status: 404, headers: noStore() });
     }
     return NextResponse.redirect(url, { status: 302, headers: noStore() });
   } catch (err) {
-    console.error(`${DOWNLOAD_LOG_PREFIX} failed resolving ${os} download`, err);
+    console.error(`${DOWNLOAD_LOG_PREFIX} failed resolving ${channel} ${os} download`, err);
     return new NextResponse("Upstream error", { status: 502, headers: noStore() });
   }
 }
@@ -111,6 +124,46 @@ export async function handleUpdateFile(
     return NextResponse.redirect(url, { status: 302, headers: noStore() });
   } catch (err) {
     console.error(`${UPDATES_LOG_PREFIX} failed serving ${file}`, err);
+    return new NextResponse("Upstream error", { status: 502, headers: noStore() });
+  }
+}
+
+// --- Internal QA update feed (#30) ------------------------------------------
+
+// Same shape as handleUpdateFile, but served from the newest pre-release with a
+// qa.yml and gated to internal (channel:qa) licenses only. A non-entitled license
+// gets 403 { error: "qa-channel-not-entitled" } (never 404), so a customer key
+// can never reach a candidate and a misconfiguration stays visible.
+export async function handleQaUpdateFile(
+  request: Request,
+  file: string,
+): Promise<Response> {
+  const dryRun = process.env.DRY_RUN === "true";
+
+  const qa = await checkQaEntitlement(licenseKeyFromRequest(request), dryRun);
+  if (!qa.ok) {
+    return NextResponse.json({ error: qa.error }, { status: qa.status, headers: noStore() });
+  }
+
+  try {
+    if (file.endsWith(".yml")) {
+      const text = await getFeedText(file, dryRun, "qa");
+      if (text === null) {
+        return new NextResponse("Not found", { status: 404, headers: noStore() });
+      }
+      return new NextResponse(text, {
+        status: 200,
+        headers: { ...noStore(), "Content-Type": "text/yaml; charset=utf-8" },
+      });
+    }
+
+    const url = await getAssetRedirectUrl(file, dryRun, "qa");
+    if (!url) {
+      return new NextResponse("Not found", { status: 404, headers: noStore() });
+    }
+    return NextResponse.redirect(url, { status: 302, headers: noStore() });
+  } catch (err) {
+    console.error(`${UPDATES_LOG_PREFIX} failed serving qa ${file}`, err);
     return new NextResponse("Upstream error", { status: 502, headers: noStore() });
   }
 }

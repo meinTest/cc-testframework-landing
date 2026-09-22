@@ -86,6 +86,41 @@ export async function checkEntitlement(
   return { ok: true, licenseId, company };
 }
 
+// --- QA channel entitlement (#30) -------------------------------------------
+
+export type QaEntitlement =
+  | { ok: true; licenseId: string }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Verdict for the internal QA update/download channel from a validate-key body.
+ * A license qualifies only when it is valid, entitled to one of our products,
+ * AND explicitly opted into QA via `metadata.channel === "qa"`. Anything else is
+ * 403 `qa-channel-not-entitled` (never 404) so a misconfiguration is visible.
+ */
+export function qaChannelVerdict(body: KeygenValidation): QaEntitlement {
+  const valid = body?.meta?.valid === true;
+  if (!valid) return { ok: false, status: 401, error: "invalid-key" };
+  const product = resolveProductId(body);
+  if (product === null || !ENTITLED_PRODUCTS.includes(product)) {
+    return { ok: false, status: 403, error: "qa-channel-not-entitled" };
+  }
+  const channel = asString(body?.data?.attributes?.metadata?.channel);
+  if (channel !== "qa") return { ok: false, status: 403, error: "qa-channel-not-entitled" };
+  return { ok: true, licenseId: body?.data?.id ?? "" };
+}
+
+export async function checkQaEntitlement(
+  licenseKey: string,
+  dryRun: boolean,
+): Promise<QaEntitlement> {
+  if (!licenseKey) return { ok: false, status: 401, error: "missing-key" };
+  if (dryRun) return { ok: true, licenseId: "dry-run-license-id" };
+  const body = await validateKey(licenseKey);
+  if (!body) return { ok: false, status: 502, error: "unavailable" };
+  return qaChannelVerdict(body);
+}
+
 // Cached wrapper: the npm registry proxy fires many metadata/tarball requests,
 // so we must not hit Keygen on every call. Caches the verdict per key ~5 min.
 const ENTITLEMENT_TTL_MS = 5 * 60 * 1000;
