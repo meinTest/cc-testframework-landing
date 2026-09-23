@@ -199,6 +199,9 @@ export async function handleNpm(
   if (!entitlement.ok) {
     return npmError(entitlement.status, entitlement.reason);
   }
+  // Only internal (channel:qa) licenses see pre-release/rc versions; customers
+  // get the stable `latest` chain only (cc-testframework#216).
+  const includePrereleases = entitlement.internal;
 
   // Per-license abuse cap (default 60 req/min).
   const perMinute = Number(process.env.NPM_RATE_LIMIT_PER_MIN) || 60;
@@ -228,7 +231,7 @@ export async function handleNpm(
     const tar = TARBALL_RE.exec(spec);
     if (tar) {
       const [, pkg, filename] = tar;
-      const originalUrl = await resolveOriginalTarball(pkg, filename);
+      const originalUrl = await resolveOriginalTarball(pkg, filename, includePrereleases);
       if (!originalUrl) return npmError(404, "Not found");
 
       const upstream = await fetchTarball(originalUrl);
@@ -250,7 +253,7 @@ export async function handleNpm(
       // Point the packument's tarball URLs back at the same mount the client
       // called (trailing slash trimmed).
       const proxyBase = `${originFromRequest(request)}${mountPrefix.replace(/\/$/, "")}`;
-      const packument = await getProxiedPackument(pack[1], proxyBase);
+      const packument = await getProxiedPackument(pack[1], proxyBase, includePrereleases);
       return NextResponse.json(packument, {
         headers: { "Cache-Control": "no-store" },
       });

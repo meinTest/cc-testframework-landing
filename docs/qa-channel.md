@@ -47,6 +47,22 @@ First-install of the QA app: the QA installer of the newest pre-release, behind
 the same entitlement gate. **Without `channel`** the download is unchanged (the
 customer installer).
 
+## Framework release candidates (npm proxy)
+
+The same visibility rule applies to the framework, which is delivered through the
+license-brokered npm proxy (`/api/tmgmt/npm/…`, cc-testframework#216):
+
+- **Customers** (any entitled license without `channel:qa`) see only the stable
+  `latest` chain. Pre-release versions (any semver with a `-`, e.g. `1.3.0-rc.1`)
+  and the dist-tags pointing at them (`rc`, `next`, …) are stripped from the
+  packument, and a pre-release tarball resolves to `404` even by direct URL.
+- **Internal** licenses (`metadata.channel = "qa"`) get the full packument
+  including `rc`, so `npm install @meintest/cc-testframework@rc` works for them.
+
+The gate reuses the same `channel:qa` marker and the cached entitlement verdict —
+no extra Keygen call. There is no publishing change here: the framework pipeline
+just publishes candidates under the `rc` dist-tag as usual.
+
 ## Unchanged
 
 `GET /api/tmgmt/updates/<file>` keeps using `getLatestRelease`, which skips

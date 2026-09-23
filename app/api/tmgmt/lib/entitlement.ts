@@ -20,7 +20,7 @@ const DEFAULT_ALLOWED: readonly ProductId[] = [PRODUCT];
 export const ENTITLED_PRODUCTS: readonly ProductId[] = ["cc-testframework", "cc-tmgmt"];
 
 export type EntitlementResult =
-  | { ok: true; licenseId: string; company: string }
+  | { ok: true; licenseId: string; company: string; internal: boolean }
   | { ok: false; status: number; reason: string };
 
 // Fuller license view for the license-status endpoint (needs expiry + licensee).
@@ -60,7 +60,7 @@ export async function checkEntitlement(
     console.log(
       `${LOG_PREFIX} DRY_RUN — accepting key ${mask(licenseKey)} for ${allowedProducts.join("|")}`,
     );
-    return { ok: true, licenseId: "dry-run-license-id", company: "DryRun Co" };
+    return { ok: true, licenseId: "dry-run-license-id", company: "DryRun Co", internal: false };
   }
 
   const body = await validateKey(licenseKey);
@@ -82,8 +82,12 @@ export async function checkEntitlement(
 
   const licenseId = body?.data?.id ?? "";
   const company = asString(body?.data?.attributes?.metadata?.company);
+  // Internal (channel:qa) licenses additionally see pre-release/rc artifacts in
+  // the npm proxy (#30 follow-up / cc-testframework#216). Carried on the cached
+  // verdict so gating adds no extra Keygen call.
+  const internal = asString(body?.data?.attributes?.metadata?.channel) === "qa";
   console.log(`${LOG_PREFIX} entitled license ${licenseId} as ${product} (key ${mask(licenseKey)})`);
-  return { ok: true, licenseId, company };
+  return { ok: true, licenseId, company, internal };
 }
 
 // --- QA channel entitlement (#30) -------------------------------------------

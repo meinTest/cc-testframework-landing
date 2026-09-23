@@ -73,13 +73,21 @@ async function fetchRawPackument(pkg: string): Promise<RawPackument> {
   return data;
 }
 
-/** Packument with every tarball URL rewritten to point back at this proxy. */
+/**
+ * Packument with every tarball URL rewritten to point back at this proxy. When
+ * `includePrereleases` is false (a normal customer license), pre-release versions
+ * and the dist-tags that point at them (e.g. `rc`) are stripped, so customers
+ * only ever see the stable `latest` chain (cc-testframework#216). Internal
+ * (channel:qa) licenses get the full packument.
+ */
 export async function getProxiedPackument(
   pkg: string,
   proxyBase: string,
+  includePrereleases: boolean,
 ): Promise<unknown> {
   const raw = await fetchRawPackument(pkg);
   const out = structuredClone(raw);
+  if (!includePrereleases) stripPrereleases(out);
   for (const version of Object.values(out.versions ?? {})) {
     const dist = version?.dist;
     if (dist?.tarball) {
@@ -91,17 +99,53 @@ export async function getProxiedPackument(
   return out;
 }
 
-/** Original GitHub tarball URL for a proxied `<pkg>/-/<filename>.tgz`, or null. */
+/**
+ * Original GitHub tarball URL for a proxied `<pkg>/-/<filename>`, or null. When
+ * `includePrereleases` is false, a pre-release version's tarball resolves to null
+ * (→ 404) so a customer can't fetch an rc build even by guessing its URL.
+ */
 export async function resolveOriginalTarball(
   pkg: string,
   filename: string,
+  includePrereleases: boolean,
 ): Promise<string | null> {
   const raw = await fetchRawPackument(pkg);
-  for (const version of Object.values(raw.versions ?? {})) {
+  for (const [ver, version] of Object.entries(raw.versions ?? {})) {
+    if (!includePrereleases && isPrerelease(ver)) continue;
     const tarball = version?.dist?.tarball;
     if (tarball && tarballFilename(tarball) === filename) return tarball;
   }
   return null;
+}
+
+/** A semver pre-release (has a `-`, e.g. 1.3.0-rc.1). */
+export function isPrerelease(version: string): boolean {
+  return version.includes("-");
+}
+
+/**
+ * Strip pre-release versions from a packument in place: removes them from
+ * `versions` and `time`, and drops any dist-tag (e.g. `rc`) pointing at one.
+ * `latest` is a stable version by convention and is left as-is.
+ */
+export function stripPrereleases(pack: RawPackument): void {
+  if (pack.versions) {
+    for (const v of Object.keys(pack.versions)) {
+      if (isPrerelease(v)) delete pack.versions[v];
+    }
+  }
+  const time = pack.time as Record<string, unknown> | undefined;
+  if (time) {
+    for (const v of Object.keys(time)) {
+      if (v !== "created" && v !== "modified" && isPrerelease(v)) delete time[v];
+    }
+  }
+  const distTags = pack["dist-tags"] as Record<string, string> | undefined;
+  if (distTags) {
+    for (const tag of Object.keys(distTags)) {
+      if (isPrerelease(distTags[tag])) delete distTags[tag];
+    }
+  }
 }
 
 /** Fetch a tarball from GitHub Packages with the service token (for streaming). */
