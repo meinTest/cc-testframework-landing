@@ -231,10 +231,13 @@ export async function handleNpm(
     const tar = TARBALL_RE.exec(spec);
     if (tar) {
       const [, pkg, filename] = tar;
-      const originalUrl = await resolveOriginalTarball(pkg, filename, includePrereleases);
-      if (!originalUrl) return npmError(404, "Not found");
+      const resolved = await resolveOriginalTarball(pkg, filename, includePrereleases);
+      // A pre-release tarball for a non-internal license → 403 (not 404), so a
+      // guessed rc URL is rejected the same way as the QA update feed (#31).
+      if (resolved.kind === "forbidden") return npmError(403, "qa-channel-not-entitled");
+      if (resolved.kind === "not-found") return npmError(404, "Not found");
 
-      const upstream = await fetchTarball(originalUrl);
+      const upstream = await fetchTarball(resolved.url);
       if (!upstream.ok || !upstream.body) return npmError(502, "Tarball fetch failed");
 
       const headers: Record<string, string> = {

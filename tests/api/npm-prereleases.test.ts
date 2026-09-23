@@ -1,7 +1,11 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-import { isPrerelease, stripPrereleases } from "../../app/api/tmgmt/lib/npm-registry";
+import {
+  isPrerelease,
+  stripPrereleases,
+  matchTarball,
+} from "../../app/api/tmgmt/lib/npm-registry";
 
 // cc-testframework#216 — pre-release (rc) npm versions are visible only to
 // internal (channel:qa) licenses; customers get the stable `latest` chain only.
@@ -52,5 +56,25 @@ describe("stripPrereleases", () => {
     stripPrereleases(p);
     assert.deepEqual(Object.keys(p.versions), ["1.2.3"]);
     assert.deepEqual(p["dist-tags"], { latest: "1.2.3" });
+  });
+});
+
+describe("matchTarball", () => {
+  const versions = {
+    "1.2.3": { dist: { tarball: "https://gh/pkg/-/aaa" } },
+    "1.3.0-rc.1": { dist: { tarball: "https://gh/pkg/-/bbb" } },
+  };
+
+  test("stable tarball → ok with url", () => {
+    assert.deepEqual(matchTarball(versions, "aaa", false), { kind: "ok", url: "https://gh/pkg/-/aaa" });
+  });
+  test("pre-release tarball for a customer → forbidden (→ 403)", () => {
+    assert.deepEqual(matchTarball(versions, "bbb", false), { kind: "forbidden" });
+  });
+  test("pre-release tarball for an internal license → ok", () => {
+    assert.deepEqual(matchTarball(versions, "bbb", true), { kind: "ok", url: "https://gh/pkg/-/bbb" });
+  });
+  test("unknown filename → not-found", () => {
+    assert.deepEqual(matchTarball(versions, "zzz", false), { kind: "not-found" });
   });
 });

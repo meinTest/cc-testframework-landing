@@ -99,23 +99,40 @@ export async function getProxiedPackument(
   return out;
 }
 
+export type TarballResolution =
+  | { kind: "ok"; url: string }
+  | { kind: "forbidden" } // a pre-release tarball requested by a non-internal license
+  | { kind: "not-found" };
+
 /**
- * Original GitHub tarball URL for a proxied `<pkg>/-/<filename>`, or null. When
- * `includePrereleases` is false, a pre-release version's tarball resolves to null
- * (→ 404) so a customer can't fetch an rc build even by guessing its URL.
+ * Resolve a proxied `<pkg>/-/<filename>` to its original GitHub tarball URL.
+ * A pre-release version's tarball requested without `includePrereleases` is
+ * `forbidden` (→ 403 qa-channel-not-entitled), so a customer can't fetch an rc
+ * build even by guessing its URL; a genuinely unknown filename is `not-found`.
  */
 export async function resolveOriginalTarball(
   pkg: string,
   filename: string,
   includePrereleases: boolean,
-): Promise<string | null> {
+): Promise<TarballResolution> {
   const raw = await fetchRawPackument(pkg);
-  for (const [ver, version] of Object.entries(raw.versions ?? {})) {
-    if (!includePrereleases && isPrerelease(ver)) continue;
+  return matchTarball(raw.versions, filename, includePrereleases);
+}
+
+/** Pure filename → tarball resolution over a versions map (unit-tested). */
+export function matchTarball(
+  versions: RawPackument["versions"],
+  filename: string,
+  includePrereleases: boolean,
+): TarballResolution {
+  for (const [ver, version] of Object.entries(versions ?? {})) {
     const tarball = version?.dist?.tarball;
-    if (tarball && tarballFilename(tarball) === filename) return tarball;
+    if (tarball && tarballFilename(tarball) === filename) {
+      if (isPrerelease(ver) && !includePrereleases) return { kind: "forbidden" };
+      return { kind: "ok", url: tarball };
+    }
   }
-  return null;
+  return { kind: "not-found" };
 }
 
 /** A semver pre-release (has a `-`, e.g. 1.3.0-rc.1). */
