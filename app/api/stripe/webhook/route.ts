@@ -70,12 +70,24 @@ export async function POST(request: Request) {
   return NextResponse.json({ received: true });
 }
 
+// Subscription statuses that mean the mirrored license(s) must be suspended:
+// a card-less trial that ended (canceled), or a failed conversion/payment.
+const DEAD_SUB_STATUSES = new Set<Stripe.Subscription.Status>([
+  "canceled",
+  "unpaid",
+  "incomplete_expired",
+]);
+
 async function reconcile(
   stripe: Stripe,
   subscriptionId: string,
   dryRun: boolean,
 ): Promise<void> {
   const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  if (DEAD_SUB_STATUSES.has(sub.status)) {
+    await suspendAll(subscriptionId, dryRun);
+    return;
+  }
   const item = sub.items.data[0];
   const quantity = Math.max(1, item?.quantity ?? 1);
   const product = resolveProduct(sub.metadata?.app_product);

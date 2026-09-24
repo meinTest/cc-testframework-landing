@@ -1,11 +1,16 @@
 import {
   createTrialLicense,
+  createPaidLicense,
   deleteLicense,
   findPendingLicenseByToken,
-  type KeygenLicense,
 } from "./keygen";
 import { sendWelcomeEmail, sendTmgmtWelcome, notifySupport } from "./resend";
-import { sanitizeTrialDays } from "./trial";
+import { sanitizeTrialDays, DEFAULT_TRIAL_DAYS } from "./trial";
+import {
+  ensureCustomer,
+  createTrialSubscription,
+  cancelSubscription,
+} from "./stripe-subscription";
 import {
   resolveProduct,
   isOffered,
@@ -15,6 +20,7 @@ import {
 } from "../../../products";
 import { isPlanId, planProducts } from "../../../plans";
 import { CURRENCIES, type BillingCycle, type Currency } from "../../../pricing";
+import { stripeTrialEnabled } from "../../../flags";
 
 // Shared signup core, used by the on-site /api/signup route and the CORS-enabled
 // public /api/public/v1/signup route (the CMS posts its own form here).
@@ -153,55 +159,34 @@ export async function performSignup(
     at: new Date().toISOString(),
   });
 
-  // Provision all licenses first, atomically: if any create fails, roll back the
-  // ones already created and fail — so a Professional signup never lands the
-  // customer with a half-provisioned account.
-  const created: { product: ProductId; license: KeygenLicense }[] = [];
-  for (const product of products) {
-    try {
-      const license = await createTrialLicense(
-        {
-          name: input.name,
-          email: input.email,
-          company: input.company,
-          product,
-          trialDays,
-          preferredCycle: input.cycle,
-          preferredCurrency: input.currency,
-        },
-        dryRun,
-      );
-      created.push({ product, license });
-    } catch (e) {
-      console.error(`${LOG_PREFIX} keygen step failed for ${product} — rolling back`, e);
-      for (const c of created) {
-        try {
-          await deleteLicense(c.license.id, dryRun);
-        } catch (rollbackErr) {
-          console.error(`${LOG_PREFIX} rollback failed for ${c.license.id} (non-fatal)`, rollbackErr);
-        }
-      }
-      return err(500, "Could not provision your trial license. Please contact support@itsbusiness.ch.");
-    }
-  }
+  // Provision the trial for each product — two models, chosen by the flag:
+  //  - Stripe trial (Variante A): a card-less trialing subscription + a Keygen
+  //    license mirroring it (expiry = trial end); conversion via the portal.
+  //  - Classic: a card-less Keygen trial license (expiry from the trial policy).
+  // Both are atomic: a partial failure rolls back everything already created.
+  const provision = stripeTrialEnabled()
+    ? await provisionStripeTrials(products, input, trialDays, dryRun)
+    : await provisionKeygenTrials(products, input, trialDays, dryRun);
+  if (!provision.ok) return provision.outcome;
+  const provisioned = provision.provisioned;
 
   // Deliver each product's welcome mail (best-effort — the license is valid
   // regardless; an email hiccup is logged, not surfaced).
-  for (const { product, license } of created) {
-    await sendWelcome(product, license, input, origin);
+  for (const p of provisioned) {
+    await sendWelcome(p.product, p.key, p.expiry, input, origin);
   }
 
   // Notify support per provisioned product (non-fatal).
-  for (const { product, license } of created) {
+  for (const p of provisioned) {
     try {
       await notifySupport(
         {
           customerName: input.name,
           customerEmail: input.email,
           company: input.company,
-          licenseId: license.id,
-          licenseKey: license.key,
-          product,
+          licenseId: p.licenseId,
+          licenseKey: p.key,
+          product: p.product,
         },
         dryRun,
       );
@@ -221,7 +206,7 @@ export async function performSignup(
   }
 
   console.log(`${LOG_PREFIX} completed`, {
-    licenseIds: created.map((c) => c.license.id),
+    licenseIds: provisioned.map((p) => p.licenseId),
     products,
     dryRun,
   });
@@ -229,9 +214,137 @@ export async function performSignup(
   return { status: 200, body: { ok: true, message: successMessage(products, dryRun) } };
 }
 
+interface ProvisionedTrial {
+  product: ProductId;
+  key: string;
+  expiry: string | null;
+  licenseId: string;
+}
+type ProvisionResult =
+  | { ok: true; provisioned: ProvisionedTrial[] }
+  | { ok: false; outcome: SignupOutcome };
+
+// Classic model: a card-less Keygen trial license per product (no Stripe).
+async function provisionKeygenTrials(
+  products: ProductId[],
+  input: SignupInput,
+  trialDays: number | undefined,
+  dryRun: boolean,
+): Promise<ProvisionResult> {
+  const created: ProvisionedTrial[] = [];
+  for (const product of products) {
+    try {
+      const license = await createTrialLicense(
+        {
+          name: input.name,
+          email: input.email,
+          company: input.company,
+          product,
+          trialDays,
+          preferredCycle: input.cycle,
+          preferredCurrency: input.currency,
+        },
+        dryRun,
+      );
+      created.push({ product, key: license.key, expiry: license.expiry, licenseId: license.id });
+    } catch (e) {
+      console.error(`${LOG_PREFIX} keygen step failed for ${product} — rolling back`, e);
+      for (const c of created) {
+        try {
+          await deleteLicense(c.licenseId, dryRun);
+        } catch (rb) {
+          console.error(`${LOG_PREFIX} rollback failed for ${c.licenseId} (non-fatal)`, rb);
+        }
+      }
+      return {
+        ok: false,
+        outcome: err(500, "Could not provision your trial license. Please contact support@itsbusiness.ch."),
+      };
+    }
+  }
+  return { ok: true, provisioned: created };
+}
+
+// Variante A: one Stripe customer + a card-less trialing subscription per product,
+// each mirrored by a Keygen license (expiry = trial end). Atomic: a failure rolls
+// back created licenses AND cancels created subscriptions.
+async function provisionStripeTrials(
+  products: ProductId[],
+  input: SignupInput,
+  trialDays: number | undefined,
+  dryRun: boolean,
+): Promise<ProvisionResult> {
+  const days = trialDays ?? DEFAULT_TRIAL_DAYS;
+  const cycle: BillingCycle = input.cycle ?? "monthly";
+  const currency: Currency = input.currency ?? "CHF";
+
+  let customerId: string;
+  try {
+    customerId = await ensureCustomer(
+      { email: input.email, name: input.name, company: input.company },
+      dryRun,
+    );
+  } catch (e) {
+    console.error(`${LOG_PREFIX} stripe customer create failed`, e);
+    return { ok: false, outcome: err(502, "Billing is not available right now. Please try again later.") };
+  }
+
+  const created: ProvisionedTrial[] = [];
+  const subs: string[] = [];
+  const rollback = async () => {
+    for (const c of created) {
+      try {
+        await deleteLicense(c.licenseId, dryRun);
+      } catch (rb) {
+        console.error(`${LOG_PREFIX} rollback license ${c.licenseId} failed (non-fatal)`, rb);
+      }
+    }
+    for (const s of subs) await cancelSubscription(s, dryRun);
+  };
+
+  for (const product of products) {
+    try {
+      const sub = await createTrialSubscription(
+        { customerId, product, cycle, currency, trialDays: days, seats: 1 },
+        dryRun,
+      );
+      if (!sub) {
+        await rollback();
+        return {
+          ok: false,
+          outcome: err(502, "No plan is configured for this product yet. Please contact support@itsbusiness.ch."),
+        };
+      }
+      subs.push(sub.subscriptionId);
+      const license = await createPaidLicense(
+        {
+          product,
+          company: input.company,
+          email: input.email,
+          subscriptionId: sub.subscriptionId,
+          stripeCustomerId: customerId,
+          seatIndex: 0,
+          expiresAt: sub.trialEndsAt,
+        },
+        dryRun,
+      );
+      created.push({ product, key: license.key, expiry: sub.trialEndsAt, licenseId: license.id });
+    } catch (e) {
+      console.error(`${LOG_PREFIX} stripe trial provision failed for ${product} — rolling back`, e);
+      await rollback();
+      return {
+        ok: false,
+        outcome: err(500, "Could not start your trial. Please contact support@itsbusiness.ch."),
+      };
+    }
+  }
+  return { ok: true, provisioned: created };
+}
+
 async function sendWelcome(
   product: ProductId,
-  license: KeygenLicense,
+  licenseKey: string,
+  licenseExpiry: string | null,
   input: SignupInput,
   origin: string,
 ): Promise<void> {
@@ -245,8 +358,8 @@ async function sendWelcome(
           toEmail: input.email,
           customerName: input.name,
           company: input.company,
-          licenseKey: license.key,
-          licenseExpiry: license.expiry,
+          licenseKey,
+          licenseExpiry,
           origin,
         },
         dryRun,
@@ -263,8 +376,8 @@ async function sendWelcome(
           toEmail: input.email,
           customerName: input.name,
           company: input.company,
-          licenseKey: license.key,
-          licenseExpiry: license.expiry,
+          licenseKey,
+          licenseExpiry,
           origin,
           quickstartUrlEn,
           quickstartUrlDe,
