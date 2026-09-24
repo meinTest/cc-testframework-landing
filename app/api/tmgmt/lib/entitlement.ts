@@ -31,8 +31,25 @@ export type LicenseDescription =
       company: string;
       customerName: string;
       expiresAt: string | null;
+      // Stable, Keygen-searchable customer number for support (#33): the license
+      // metadata.customerId when set, else the Keygen license id. Never the
+      // Stripe customer id. null only when neither is available.
+      customerId: string | null;
     }
   | { ok: false; status: number; reason?: "invalid" | "expired"; message: string };
+
+/**
+ * Resolve the support-facing customer number: a team-set `metadata.customerId`
+ * wins (a per-customer number, stable across a customer's seats); otherwise the
+ * Keygen license id, which is always present and directly searchable in Keygen.
+ * Not a secret and not the Stripe id. null when neither exists.
+ */
+export function resolveCustomerId(
+  metadata: Record<string, unknown>,
+  licenseId: string,
+): string | null {
+  return asString(metadata.customerId).trim() || licenseId || null;
+}
 
 /**
  * Validate a Keygen license key for cc-tmgmt access.
@@ -173,6 +190,7 @@ export async function describeLicense(
       company: "DryRun Co",
       customerName: "Dry Run Tester",
       expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      customerId: "dry-run-license-id",
     };
   }
 
@@ -185,15 +203,17 @@ export async function describeLicense(
   const product = resolveProductId(body);
 
   if (valid && product === PRODUCT) {
+    const licenseId = body?.data?.id ?? "";
     return {
       ok: true,
-      licenseId: body?.data?.id ?? "",
+      licenseId,
       company: asString(metadata.company),
       customerName: asString(metadata.customerName),
       expiresAt:
         typeof body?.data?.attributes?.expiry === "string"
           ? body.data.attributes.expiry
           : null,
+      customerId: resolveCustomerId(metadata, licenseId),
     };
   }
 
@@ -232,6 +252,8 @@ export type LicenseStatusResult =
       valid: boolean;
       entitled: boolean;
       code: string;
+      // Support-facing customer number (#33), same value as GET /api/license.
+      customerId: string | null;
       meta: LicenseStatusMeta;
       // manageable ⇔ tied to a Stripe subscription → "manage/cancel" (#13).
       // upgradeable ⇔ a trial with no subscription → "upgrade to paid" (#14).
@@ -253,6 +275,7 @@ export async function licenseStatus(
       valid: true,
       entitled: true,
       code: "VALID",
+      customerId: "dry-run-license-id",
       meta: {
         product: PRODUCT,
         company: "DryRun Co",
@@ -283,6 +306,7 @@ export async function licenseStatus(
     valid,
     entitled,
     code,
+    customerId: resolveCustomerId(metadata, body?.data?.id ?? ""),
     meta: {
       product,
       company: asString(metadata.company) || null,

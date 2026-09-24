@@ -32,6 +32,8 @@ export async function GET(request: Request) {
       expiresAt: license.expiresAt,
       licensee: license.customerName || null,
       company: license.company || null,
+      // Support-facing customer number (#33) — never the Stripe id.
+      customerId: license.customerId,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

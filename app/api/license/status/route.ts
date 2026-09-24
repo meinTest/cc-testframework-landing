@@ -36,6 +36,9 @@ export async function GET(request: Request) {
     valid: result.valid,
     entitled: result.entitled,
     code: result.code,
+    // Support-facing customer number (#33) — lets the license page backfill it
+    // for installs activated before this change. Never the Stripe id.
+    customerId: result.customerId,
     meta: result.meta,
     billing: result.billing,
   });
