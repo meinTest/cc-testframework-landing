@@ -454,6 +454,9 @@ export interface PaidLicenseInput {
   product: ProductId;
   company: string;
   email: string;
+  // Optional licensee name → stored as metadata.customerName so /api/license can
+  // return `licensee` (esp. for Variante A trials provisioned via this path).
+  customerName?: string;
   subscriptionId: string;
   // Stripe customer id — stored so /api/license/portal can open the customer's
   // billing portal without an extra subscription lookup (#13).
@@ -508,6 +511,7 @@ export async function createPaidLicense(
               product: input.product,
               kind: "paid",
               company: input.company,
+              ...(input.customerName ? { customerName: input.customerName } : {}),
               email: input.email,
               subscriptionId: input.subscriptionId,
               stripeCustomerId: input.stripeCustomerId,

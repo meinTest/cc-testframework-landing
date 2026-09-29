@@ -14,6 +14,28 @@ interface WelcomeInput {
   origin: string;
   quickstartUrlEn: string;
   quickstartUrlDe: string;
+  // Stripe billing-portal link (only for subscription-backed trials, Variante A):
+  // where the customer adds a card to convert the trial. Omitted → no section.
+  portalUrl?: string;
+}
+
+// "Add a card to keep going" section for the welcome mails — only when the trial
+// is subscription-backed (a portal link exists). #34.
+function billingBlock(portalUrl?: string): { html: string; text: string[] } {
+  if (!portalUrl) return { html: "", text: [] };
+  return {
+    html: `
+    <h2>Keep going after your trial</h2>
+    <p>Your trial converts to a paid subscription only if you add a payment method.
+       Manage billing (add a card, view invoices, cancel) here:</p>
+    <p><a href="${portalUrl}">Manage your subscription</a></p>`,
+    text: [
+      ``,
+      `Keep going after your trial — add a payment method to convert it to a paid`,
+      `subscription (or cancel) in the billing portal:`,
+      `   ${portalUrl}`,
+    ],
+  };
 }
 
 interface SupportNotifyInput {
@@ -62,6 +84,8 @@ export async function sendWelcomeEmail(
   const authRef = `${origin.replace(/^https?:/, "")}${registryPath}`; // //host/api/tmgmt/npm/
   const npmrc = `@meintest:registry=${registryUrl}\n${authRef}:_authToken=${input.licenseKey}`;
 
+  const billing = billingBlock(input.portalUrl);
+
   const html = `
     <h1>Welcome to cc-testframework</h1>
     <p>Hi ${escape(input.customerName)},</p>
@@ -80,6 +104,7 @@ export async function sendWelcomeEmail(
       <a href="${input.quickstartUrlEn}">English</a> &nbsp;|&nbsp;
       <a href="${input.quickstartUrlDe}">Deutsch</a>
     </p>
+    ${billing.html}
     <hr>
     <p>Questions? Reply to this email or reach us at
        <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
@@ -100,6 +125,7 @@ export async function sendWelcomeEmail(
     `3. Read the quickstart:`,
     `   English: ${input.quickstartUrlEn}`,
     `   Deutsch: ${input.quickstartUrlDe}`,
+    ...billing.text,
     ``,
     `Questions? support@itsbusiness.ch`,
   ].join("\n");
@@ -351,6 +377,8 @@ interface TmgmtWelcomeInput {
   licenseExpiry: string | null;
   // Base URL of this deployment, used to build gated download links.
   origin: string;
+  // Stripe billing-portal link (subscription-backed trials, Variante A). #34.
+  portalUrl?: string;
 }
 
 export async function sendTmgmtWelcome(
@@ -380,6 +408,8 @@ export async function sendTmgmtWelcome(
   const downloadUrl = (os: "win" | "mac" | "linux") =>
     `${input.origin}/api/tmgmt/download?os=${os}&key=${encodeURIComponent(input.licenseKey)}`;
 
+  const billing = billingBlock(input.portalUrl);
+
   const html = `
     <h1>Welcome to CC Test Management</h1>
     <p>Hi ${escape(input.customerName)},</p>
@@ -398,6 +428,7 @@ export async function sendTmgmtWelcome(
     <p style="color:#64748b;font-size:13px">Keep this code safe — it unlocks the
        app and its automatic updates. It is tied to your license; if it expires
        or is revoked, the app will stop updating.</p>
+    ${billing.html}
     <hr>
     <p>Questions? Reply to this email or reach us at
        <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
@@ -420,6 +451,7 @@ export async function sendTmgmtWelcome(
     `   ${input.licenseKey}`,
     ``,
     `Keep this code safe — it unlocks the app and its automatic updates.`,
+    ...billing.text,
     ``,
     `Questions? support@itsbusiness.ch`,
   ].join("\n");

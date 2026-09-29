@@ -171,9 +171,13 @@ export async function performSignup(
   const provisioned = provision.provisioned;
 
   // Deliver each product's welcome mail (best-effort — the license is valid
-  // regardless; an email hiccup is logged, not surfaced).
+  // regardless; an email hiccup is logged, not surfaced). Subscription-backed
+  // trials get a billing-portal "add a card to keep going" link (#34).
   for (const p of provisioned) {
-    await sendWelcome(p.product, p.key, p.expiry, input, origin);
+    const portalUrl = p.manageable
+      ? `${origin}/api/license/portal?key=${encodeURIComponent(p.key)}`
+      : undefined;
+    await sendWelcome(p.product, p.key, p.expiry, input, origin, portalUrl);
   }
 
   // Notify support per provisioned product (non-fatal).
@@ -219,6 +223,9 @@ interface ProvisionedTrial {
   key: string;
   expiry: string | null;
   licenseId: string;
+  // Subscription-backed (Variante A) → a billing portal exists → link it in the
+  // welcome mail. Classic Keygen trials have no portal.
+  manageable: boolean;
 }
 type ProvisionResult =
   | { ok: true; provisioned: ProvisionedTrial[] }
@@ -246,7 +253,7 @@ async function provisionKeygenTrials(
         },
         dryRun,
       );
-      created.push({ product, key: license.key, expiry: license.expiry, licenseId: license.id });
+      created.push({ product, key: license.key, expiry: license.expiry, licenseId: license.id, manageable: false });
     } catch (e) {
       console.error(`${LOG_PREFIX} keygen step failed for ${product} — rolling back`, e);
       for (const c of created) {
@@ -321,6 +328,7 @@ async function provisionStripeTrials(
           product,
           company: input.company,
           email: input.email,
+          customerName: input.name,
           subscriptionId: sub.subscriptionId,
           stripeCustomerId: customerId,
           seatIndex: 0,
@@ -328,7 +336,7 @@ async function provisionStripeTrials(
         },
         dryRun,
       );
-      created.push({ product, key: license.key, expiry: sub.trialEndsAt, licenseId: license.id });
+      created.push({ product, key: license.key, expiry: sub.trialEndsAt, licenseId: license.id, manageable: true });
     } catch (e) {
       console.error(`${LOG_PREFIX} stripe trial provision failed for ${product} — rolling back`, e);
       await rollback();
@@ -347,6 +355,7 @@ async function sendWelcome(
   licenseExpiry: string | null,
   input: SignupInput,
   origin: string,
+  portalUrl?: string,
 ): Promise<void> {
   const dryRun = process.env.DRY_RUN === "true";
   try {
@@ -361,6 +370,7 @@ async function sendWelcome(
           licenseKey,
           licenseExpiry,
           origin,
+          portalUrl,
         },
         dryRun,
       );
@@ -381,6 +391,7 @@ async function sendWelcome(
           origin,
           quickstartUrlEn,
           quickstartUrlDe,
+          portalUrl,
         },
         dryRun,
       );
