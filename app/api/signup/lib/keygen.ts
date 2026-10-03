@@ -446,7 +446,7 @@ export async function markReminderSent(
 // ── Paid subscription licenses (one Keygen license/key per seat) ────────────
 
 function paidPolicyId(product: ProductId): string {
-  if (product === "cc-tmgmt") return required("KEYGEN_TMGMT_PAID_POLICY_ID");
+  if (product === "TMT") return required("KEYGEN_TMGMT_PAID_POLICY_ID");
   return required("KEYGEN_PAID_POLICY_ID");
 }
 
@@ -649,7 +649,7 @@ export function reinstateLicense(licenseId: string, dryRun: boolean): Promise<vo
 // Trial policy per product: cc-tmgmt has its own; the framework keeps the
 // original env var.
 function trialPolicyId(product: ProductId): string {
-  if (product === "cc-tmgmt") return required("KEYGEN_TMGMT_TRIAL_POLICY_ID");
+  if (product === "TMT") return required("KEYGEN_TMGMT_TRIAL_POLICY_ID");
   return required("KEYGEN_TRIAL_POLICY_ID");
 }
 

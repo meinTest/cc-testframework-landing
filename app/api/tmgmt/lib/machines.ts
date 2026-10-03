@@ -1,4 +1,5 @@
 import { validateKey, type KeygenValidation } from "./entitlement";
+import { coerceProduct } from "../../../products";
 
 // Device/seat binding via Keygen machine activation (#29). One key = one device:
 // each license carries maxMachines=1 and the trial policy uses
@@ -288,7 +289,9 @@ export function licenseIdentity(body: KeygenValidation): LicenseIdentity {
     email: normalizeEmail(md.email),
     // Product from our own metadata, else resolved from the policy (licenses
     // created straight off a product policy carry no metadata.product).
-    product: asStringOrNull(md.product) ?? productFromPolicy(policy),
+    // Canonicalize so legacy metadata (cc-tmgmt) and policy-resolved (TMT) match
+    // in canTakeover (#43).
+    product: coerceProduct(md.product) ?? productFromPolicy(policy),
     // Paid when tied to a Stripe subscription, created as a paid seat, OR simply
     // sitting on a paid policy (a license created directly off the paid policy
     // has neither subscriptionId nor kind).
@@ -313,11 +316,11 @@ function extractPolicyRef(body: KeygenValidation): { id: string | null; name: st
 function productFromPolicy(policy: { id: string | null; name: string | null }): string | null {
   const framework = [process.env.KEYGEN_TRIAL_POLICY_ID, process.env.KEYGEN_PAID_POLICY_ID];
   const tmgmt = [process.env.KEYGEN_TMGMT_TRIAL_POLICY_ID, process.env.KEYGEN_TMGMT_PAID_POLICY_ID];
-  if (policy.id && framework.includes(policy.id)) return "cc-testframework";
-  if (policy.id && tmgmt.includes(policy.id)) return "cc-tmgmt";
+  if (policy.id && framework.includes(policy.id)) return "FW";
+  if (policy.id && tmgmt.includes(policy.id)) return "TMT";
   const name = (policy.name ?? "").toLowerCase();
-  if (name.includes("cc-tmgmt")) return "cc-tmgmt";
-  if (name.includes("cc-testframework")) return "cc-testframework";
+  if (name.includes("cc-tmgmt")) return "TMT";
+  if (name.includes("cc-testframework")) return "FW";
   return null;
 }
 

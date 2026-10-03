@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<{ lang?: string | string[] }>;
 
-const PRODUCT = "cc-testframework";
+const PRODUCT = "FW";
 
 export default async function FrameworkPricingPage({
   searchParams,

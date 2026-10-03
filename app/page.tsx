@@ -16,11 +16,11 @@ export default async function Home({
   const t = content[lang];
 
   const cardFor: Record<ProductId, { name: string; tagline: string; blurb: string; href: string }> = {
-    "cc-testframework": {
+    FW: {
       ...t.overview.framework,
       href: withLang("/cc-testframework/pricing", lang),
     },
-    "cc-tmgmt": {
+    TMT: {
       ...t.overview.mgmt,
       href: withLang("/cc-testmanagement/pricing", lang),
     },

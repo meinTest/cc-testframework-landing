@@ -69,26 +69,26 @@ describe("classifyCreateConflict", () => {
 });
 
 describe("canTakeover (trial→paid device takeover)", () => {
-  const paid: LicenseIdentity = { email: "a@acme.test", product: "cc-tmgmt", isPaid: true };
+  const paid: LicenseIdentity = { email: "a@acme.test", product: "TMT", isPaid: true };
 
   test("paid + same customer + same product → true", () => {
-    assert.equal(canTakeover(paid, { email: "a@acme.test", product: "cc-tmgmt", isPaid: false }), true);
+    assert.equal(canTakeover(paid, { email: "a@acme.test", product: "TMT", isPaid: false }), true);
   });
   test("email match is case-insensitive (normalized upstream)", () => {
-    assert.equal(canTakeover(paid, { email: "a@acme.test", product: "cc-tmgmt", isPaid: true }), true);
+    assert.equal(canTakeover(paid, { email: "a@acme.test", product: "TMT", isPaid: true }), true);
   });
   test("current license is a TRIAL → false (no trial→trial takeover)", () => {
-    const trial: LicenseIdentity = { email: "a@acme.test", product: "cc-tmgmt", isPaid: false };
-    assert.equal(canTakeover(trial, { email: "a@acme.test", product: "cc-tmgmt", isPaid: false }), false);
+    const trial: LicenseIdentity = { email: "a@acme.test", product: "TMT", isPaid: false };
+    assert.equal(canTakeover(trial, { email: "a@acme.test", product: "TMT", isPaid: false }), false);
   });
   test("different customer → false (never touch another's device)", () => {
-    assert.equal(canTakeover(paid, { email: "b@other.test", product: "cc-tmgmt", isPaid: false }), false);
+    assert.equal(canTakeover(paid, { email: "b@other.test", product: "TMT", isPaid: false }), false);
   });
   test("different product → false", () => {
-    assert.equal(canTakeover(paid, { email: "a@acme.test", product: "cc-testframework", isPaid: false }), false);
+    assert.equal(canTakeover(paid, { email: "a@acme.test", product: "FW", isPaid: false }), false);
   });
   test("missing emails → false", () => {
-    assert.equal(canTakeover({ email: null, product: "cc-tmgmt", isPaid: true }, { email: null, product: "cc-tmgmt", isPaid: false }), false);
+    assert.equal(canTakeover({ email: null, product: "TMT", isPaid: true }, { email: null, product: "TMT", isPaid: false }), false);
   });
 });
 
@@ -102,16 +102,17 @@ describe("licenseIdentity (paid/product resolved from policy)", () => {
   }
 
   test("paid detected from the policy name when metadata has no kind/subscription", () => {
+    // Legacy metadata id (cc-tmgmt) is coerced to the canonical TMT (#43).
     const id = licenseIdentity(body({ email: "A@Acme.test", product: "cc-tmgmt" }, "cc-tmgmt Paid"));
     assert.equal(id.isPaid, true);
     assert.equal(id.email, "a@acme.test"); // normalized
-    assert.equal(id.product, "cc-tmgmt");
+    assert.equal(id.product, "TMT");
   });
 
   test("trial policy → not paid; product resolved from the policy name", () => {
     const id = licenseIdentity(body({ email: "a@acme.test" }, "cc-tmgmt Trial")); // no metadata.product
     assert.equal(id.isPaid, false);
-    assert.equal(id.product, "cc-tmgmt"); // resolved from policy name
+    assert.equal(id.product, "TMT"); // resolved from policy name → canonical
   });
 
   test("subscriptionId in metadata → paid regardless of policy", () => {

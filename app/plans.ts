@@ -14,9 +14,9 @@ import type { ProductId } from "./products";
 export type PlanId = "starter-framework" | "starter-tmt" | "professional";
 
 export const PLANS: Record<PlanId, { label: string; products: ProductId[] }> = {
-  "starter-framework": { label: "Starter", products: ["cc-testframework"] },
-  "starter-tmt": { label: "Starter", products: ["cc-tmgmt"] },
-  "professional": { label: "Professional", products: ["cc-tmgmt", "cc-testframework"] },
+  "starter-framework": { label: "Starter", products: ["FW"] },
+  "starter-tmt": { label: "Starter", products: ["TMT"] },
+  "professional": { label: "Professional", products: ["TMT", "FW"] },
 };
 
 export const PLAN_IDS = Object.keys(PLANS) as PlanId[];

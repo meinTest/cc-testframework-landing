@@ -47,12 +47,9 @@ describe("GET /api/public/v1/pricing", () => {
     assert.deepEqual(body.currencies, ["CHF", "EUR", "USD"]);
     assert.deepEqual(body.cycles, ["monthly", "yearly"]);
     assert.equal(typeof body.yearlyDiscountPct, "number");
-    assert.deepEqual(Object.keys(body.products).sort(), [
-      "cc-testframework",
-      "cc-tmgmt",
-    ]);
+    assert.deepEqual(Object.keys(body.products).sort(), ["FW", "TMT"]);
 
-    const tmgmt = body.products["cc-tmgmt"];
+    const tmgmt = body.products["TMT"];
     assert.equal(tmgmt.source, "fallback");
     // In-code base is 45 CHF/user/month; yearly = 12×45×(1-0.1) = 486.
     assert.equal(tmgmt.prices.CHF.monthly, 45);
@@ -70,9 +67,16 @@ describe("GET /api/public/v1/pricing", () => {
   });
 
   test("?product filters to a single product", async () => {
-    const res = await GET(req("?product=cc-tmgmt"));
+    const res = await GET(req("?product=TMT"));
     const body = (await res.json()) as PricingBody;
-    assert.deepEqual(Object.keys(body.products), ["cc-tmgmt"]);
+    assert.deepEqual(Object.keys(body.products), ["TMT"]);
+  });
+
+  test("?product tolerates a legacy id (coerced to canonical)", async () => {
+    const res = await GET(req("?product=cc-tmgmt"));
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as PricingBody;
+    assert.deepEqual(Object.keys(body.products), ["TMT"]);
   });
 
   test("?currency filters to a single currency", async () => {

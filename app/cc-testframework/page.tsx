@@ -12,20 +12,20 @@ export default async function FrameworkPage({
 }: {
   searchParams: SearchParams;
 }) {
-  if (!isOffered("cc-testframework")) notFound();
+  if (!isOffered("FW")) notFound();
 
   const { lang: langParam } = await searchParams;
   const lang = resolveLang(langParam);
   const t = content[lang];
   const p = t.framework;
 
-  const primaryCta = isVetted("cc-testframework")
+  const primaryCta = isVetted("FW")
     ? {
-        href: withLang("/demo-request?product=cc-testframework", lang),
+        href: withLang("/demo-request?product=FW", lang),
         label: t.common.requestDemo,
       }
     : {
-        href: withLang("/signup?product=cc-testframework", lang),
+        href: withLang("/signup?product=FW", lang),
         label: t.common.startTrial,
       };
 

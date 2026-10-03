@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<{ lang?: string | string[] }>;
 
-const PRODUCT = "cc-tmgmt";
+const PRODUCT = "TMT";
 
 export default async function ManagementPricingPage({
   searchParams,

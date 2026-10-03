@@ -63,7 +63,7 @@ export default function SignupForm({
         return;
       }
       setSuccessMessage(
-        product === "cc-tmgmt" ? copy.successTmgmt : copy.successFramework,
+        product === "TMT" ? copy.successTmgmt : copy.successFramework,
       );
       setState("ok");
     } catch (err) {

@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import type { ProductId } from "../products";
+import { coerceProduct, type ProductId } from "../products";
 import {
   CURRENCIES,
   getProductPrices,
@@ -10,9 +10,10 @@ import {
 
 // Reads subscription prices from Stripe (the single source of truth: sales
 // manages them in the dashboard). Each Stripe Product is mapped to our product
-// via a `app_product` metadata key ("cc-testframework" | "cc-tmgmt"). Results
-// are cached in-process for a few minutes. If Stripe is not configured/reachable
-// or a price is missing, the pricing pages fall back to the in-code config.
+// via an `app_product` metadata key — canonical "FW"/"TMT" OR the legacy
+// "cc-testframework"/"cc-tmgmt" (coerced to canonical, #43). Results are cached
+// in-process for a few minutes. If Stripe is not configured/reachable or a price
+// is missing, the pricing pages fall back to the in-code config.
 
 export interface CyclePrice {
   amount: number; // major units (whole CHF/EUR/USD)
@@ -30,9 +31,6 @@ function client(): Stripe | null {
   return key ? new Stripe(key) : null;
 }
 
-function isAppProduct(value: unknown): value is ProductId {
-  return value === "cc-testframework" || value === "cc-tmgmt";
-}
 
 function intervalToCycle(interval: string): BillingCycle | null {
   if (interval === "month") return "monthly";
@@ -58,8 +56,9 @@ async function fetchAll(): Promise<Record<string, StripeProductPricing>> {
     if (typeof product === "string" || "deleted" in product) continue;
     if (product.active === false) continue;
 
-    const appProduct = product.metadata?.app_product;
-    if (!isAppProduct(appProduct)) continue;
+    // Accept canonical (FW/TMT) and legacy (cc-*) app_product; key by canonical.
+    const appProduct = coerceProduct(product.metadata?.app_product);
+    if (!appProduct) continue;
 
     const currency = price.currency.toUpperCase() as Currency;
     if (!CURRENCIES.includes(currency)) continue;

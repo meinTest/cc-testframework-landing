@@ -1,23 +1,23 @@
-import type { ProductId } from "../../../products";
+import { coerceProduct, type ProductId } from "../../../products";
 
-// Entitlement check for the cc-tmgmt update/download proxy. The Electron app
-// sends its Keygen license key as a Bearer token; we validate it against Keygen
-// and confirm the license is for this product before serving any release asset.
+// Entitlement check for the TMT update/download proxy. The Electron app sends its
+// Keygen license key as a Bearer token; we validate it against Keygen and confirm
+// the license is for this product before serving any release asset.
 
 const LOG_PREFIX = "[tmgmt][entitlement]";
-const PRODUCT: ProductId = "cc-tmgmt";
-// Default gate for the cc-tmgmt-only resources (download/updates/feedback). The
-// npm registry proxy overrides this — the @meintest/cc-testframework package is
-// legitimately consumed by both a standalone framework license and a cc-tmgmt
-// license (which pulls the framework as a dependency).
+const PRODUCT: ProductId = "TMT";
+// Default gate for the TMT-only resources (download/updates/feedback). The npm
+// registry proxy overrides this — the @meintest/cc-testframework package is
+// legitimately consumed by both a standalone FW license and a TMT license (which
+// pulls the framework as a dependency).
 const DEFAULT_ALLOWED: readonly ProductId[] = [PRODUCT];
 
 // Shared entitlement gate for the cross-product proxy services: a valid license
 // for EITHER product qualifies. Used by the npm broker (install
 // @meintest/cc-testframework), the /license/status "entitled" verdict (Issue #8),
 // and the feedback endpoints (Issue #10) — one constant so these can never
-// diverge. (The cc-tmgmt-only resources download/updates keep DEFAULT_ALLOWED.)
-export const ENTITLED_PRODUCTS: readonly ProductId[] = ["cc-testframework", "cc-tmgmt"];
+// diverge. (The TMT-only resources download/updates keep DEFAULT_ALLOWED.)
+export const ENTITLED_PRODUCTS: readonly ProductId[] = ["FW", "TMT"];
 
 export type EntitlementResult =
   | { ok: true; licenseId: string; company: string; internal: boolean }
@@ -228,7 +228,7 @@ export async function describeLicense(
       ok: false,
       status: 403,
       reason: "invalid",
-      message: "License is not valid for cc-tmgmt",
+      message: "License is not valid for TMT",
     };
   }
   // NOT_FOUND / missing / any other → treat as an unresolvable/invalid key.
@@ -486,15 +486,18 @@ function resolveProductId(body: KeygenValidation): ProductId | null {
   const pendingId = process.env.KEYGEN_PENDING_POLICY_ID;
   if (policy.id && pendingId && policy.id === pendingId) return null;
 
-  const fromMeta = asProductId(body?.data?.attributes?.metadata?.product);
+  // metadata.product may carry a canonical (FW/TMT) OR legacy
+  // (cc-testframework/cc-tmgmt) id — coerceProduct handles both.
+  const fromMeta = coerceProduct(body?.data?.attributes?.metadata?.product);
   if (fromMeta) return fromMeta;
 
   const fromPolicyId = productFromPolicyId(policy.id);
   if (fromPolicyId) return fromPolicyId;
 
+  // Policy names are unchanged by #43 (cc-tmgmt-* / cc-testframework-*).
   const name = (policy.name ?? "").toLowerCase();
-  if (name.includes("cc-tmgmt")) return "cc-tmgmt";
-  if (name.includes("cc-testframework")) return "cc-testframework";
+  if (name.includes("cc-tmgmt")) return "TMT";
+  if (name.includes("cc-testframework")) return "FW";
 
   return null;
 }
@@ -515,13 +518,9 @@ function productFromPolicyId(policyId: string | null): ProductId | null {
   if (!policyId) return null;
   const framework = [process.env.KEYGEN_TRIAL_POLICY_ID, process.env.KEYGEN_PAID_POLICY_ID];
   const tmgmt = [process.env.KEYGEN_TMGMT_TRIAL_POLICY_ID, process.env.KEYGEN_TMGMT_PAID_POLICY_ID];
-  if (framework.includes(policyId)) return "cc-testframework";
-  if (tmgmt.includes(policyId)) return "cc-tmgmt";
+  if (framework.includes(policyId)) return "FW";
+  if (tmgmt.includes(policyId)) return "TMT";
   return null;
-}
-
-function asProductId(value: unknown): ProductId | null {
-  return value === "cc-tmgmt" || value === "cc-testframework" ? value : null;
 }
 
 export interface KeygenValidation {

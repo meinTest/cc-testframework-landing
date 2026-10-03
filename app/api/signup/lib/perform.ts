@@ -359,7 +359,7 @@ async function sendWelcome(
 ): Promise<void> {
   const dryRun = process.env.DRY_RUN === "true";
   try {
-    if (product === "cc-tmgmt") {
+    if (product === "TMT") {
       // cc-tmgmt: the license key is the access code; the welcome mail carries it
       // plus the gated per-OS download links. No GitHub invite.
       await sendTmgmtWelcome(
@@ -409,7 +409,7 @@ export function successMessage(products: ProductId[], dryRun: boolean): string {
     const labels = products.map(productLabel).join(" and ");
     return `Trial activated. Check your email for your setup instructions for ${labels}.`;
   }
-  return products[0] === "cc-tmgmt"
+  return products[0] === "TMT"
     ? "Trial activated. Check your email for your download links and access code."
     : "Trial activated. Check your email for your license key and setup instructions.";
 }

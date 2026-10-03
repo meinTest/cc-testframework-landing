@@ -15,8 +15,8 @@ export const dynamic = "force-dynamic";
 
 // App product → pricing-page route segment (for the cancel URL).
 const PRICING_PATH: Record<ProductId, string> = {
-  "cc-testframework": "cc-testframework",
-  "cc-tmgmt": "cc-testmanagement",
+  FW: "cc-testframework",
+  TMT: "cc-testmanagement",
 };
 
 export async function GET(request: Request) {

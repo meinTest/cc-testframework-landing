@@ -16,8 +16,8 @@ export const CURRENCIES: Currency[] = ["CHF", "EUR", "USD"];
 export const PRICING = {
   /** Base price per user/month in CHF, per product (both 45 today; editable). */
   baseMonthlyCHF: {
-    "cc-testframework": 45,
-    "cc-tmgmt": 45,
+    FW: 45,
+    TMT: 45,
   } as Record<ProductId, number>,
   /** Discount on the annual total (12× monthly). 0.10 = 10% off. */
   yearlyDiscount: 0.1,

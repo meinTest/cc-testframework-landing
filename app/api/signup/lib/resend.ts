@@ -54,7 +54,7 @@ export async function sendWelcomeEmail(
   const from = required("RESEND_FROM");
 
   const licensePdf = await buildLicensePdf({
-    productName: productLabel("cc-testframework"),
+    productName: productLabel("FW"),
     licensee: input.customerName,
     company: input.company,
     licenseKey: input.licenseKey,
@@ -388,7 +388,7 @@ export async function sendTmgmtWelcome(
   const from = required("RESEND_FROM");
 
   const licensePdf = await buildLicensePdf({
-    productName: productLabel("cc-tmgmt"),
+    productName: productLabel("TMT"),
     licensee: input.customerName,
     company: input.company,
     licenseKey: input.licenseKey,

@@ -42,10 +42,10 @@ describe("GET /api/public/v1/products", () => {
 
     assert.equal(body.products.length, 2);
     const ids = body.products.map((p) => p.id).sort();
-    assert.deepEqual(ids, ["cc-testframework", "cc-tmgmt"]);
+    assert.deepEqual(ids, ["FW", "TMT"]);
     assert.ok(!Number.isNaN(Date.parse(body.generatedAt)));
 
-    const tmgmt = body.products.find((p) => p.id === "cc-tmgmt")!;
+    const tmgmt = body.products.find((p) => p.id === "TMT")!;
     assert.equal(tmgmt.name, "CC Test Management");
     assert.equal(tmgmt.slug, "cc-testmanagement");
     assert.equal(tmgmt.offered, true);
@@ -58,9 +58,9 @@ describe("GET /api/public/v1/products", () => {
     const body = (await res.json()) as {
       products: Array<{ id: string; cta: { kind: string; url: string } }>;
     };
-    const fw = body.products.find((p) => p.id === "cc-testframework")!;
+    const fw = body.products.find((p) => p.id === "FW")!;
     assert.equal(fw.cta.kind, "trial");
-    assert.equal(fw.cta.url, `${BASE}/signup?product=cc-testframework`);
+    assert.equal(fw.cta.url, `${BASE}/signup?product=FW`);
   });
 
   test("CTA is a demo request when the product is sales-vetted", async () => {
@@ -69,11 +69,11 @@ describe("GET /api/public/v1/products", () => {
     const body = (await res.json()) as {
       products: Array<{ id: string; cta: { kind: string; url: string } }>;
     };
-    const tmgmt = body.products.find((p) => p.id === "cc-tmgmt")!;
+    const tmgmt = body.products.find((p) => p.id === "TMT")!;
     assert.equal(tmgmt.cta.kind, "demo");
     assert.equal(
       tmgmt.cta.url,
-      `${BASE}/demo-request?product=cc-tmgmt&plan=subscription`,
+      `${BASE}/demo-request?product=TMT&plan=subscription`,
     );
   });
 
@@ -84,19 +84,19 @@ describe("GET /api/public/v1/products", () => {
     const body = (await res.json()) as {
       products: Array<{ id: string; cta: { kind: string } }>;
     };
-    assert.equal(body.products.find((p) => p.id === "cc-tmgmt")!.cta.kind, "trial");
+    assert.equal(body.products.find((p) => p.id === "TMT")!.cta.kind, "trial");
     assert.equal(
-      body.products.find((p) => p.id === "cc-testframework")!.cta.kind,
+      body.products.find((p) => p.id === "FW")!.cta.kind,
       "demo",
     );
   });
 
-  test("PRODUCTS_OFFERED narrows the catalog", async () => {
+  test("PRODUCTS_OFFERED narrows the catalog (legacy id tolerated)", async () => {
     process.env.PRODUCTS_OFFERED = "cc-tmgmt";
     const res = await GET(req());
     const body = (await res.json()) as { products: Array<{ id: string }> };
     assert.equal(body.products.length, 1);
-    assert.equal(body.products[0].id, "cc-tmgmt");
+    assert.equal(body.products[0].id, "TMT");
   });
 
   test("builds links from LANDING_BASE_URL", async () => {

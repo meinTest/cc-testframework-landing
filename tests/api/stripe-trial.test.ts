@@ -41,7 +41,7 @@ describe("stripe-subscription helpers (DRY_RUN)", () => {
 
   test("createTrialSubscription returns a trialing sub with the trial end ~trialDays out", async () => {
     const sub = await createTrialSubscription(
-      { customerId: "cus_DRYRUN", product: "cc-tmgmt", cycle: "monthly", currency: "CHF", trialDays: 14, seats: 1 },
+      { customerId: "cus_DRYRUN", product: "TMT", cycle: "monthly", currency: "CHF", trialDays: 14, seats: 1 },
       true,
     );
     assert.ok(sub);

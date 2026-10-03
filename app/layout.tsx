@@ -23,13 +23,13 @@ const THEME_INIT = `(function(){try{if(localStorage.getItem('theme')==='dark'){d
 
 // Per-product SEO copy. The combined (both-offered) variant is the default.
 const PRODUCT_META: Record<ProductId, { title: string; description: string }> = {
-  "cc-testframework": {
+  FW: {
     title:
       "CC-Testframework — TypeScript-Test-Framework für Web, Desktop & Mobile",
     description:
       "TypeScript-Test-Framework mit eingebauten Konventionen für Web, Desktop und Mobile. Playwright und Appium unter einer Oberfläche.",
   },
-  "cc-tmgmt": {
+  TMT: {
     title:
       "CC Test Management — Git-basiertes Test-Management als lokale Windows-App",
     description:

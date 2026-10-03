@@ -63,7 +63,7 @@ describe("createTrialLicense expiry (DRY_RUN)", () => {
     email: "a@b.test",
     name: "A B",
     company: "Acme",
-    product: "cc-testframework" as const,
+    product: "FW" as const,
   };
 
   function daysUntil(iso: string): number {

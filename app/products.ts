@@ -3,32 +3,56 @@
 // through the signed action token, the Keygen pending/trial license metadata,
 // and into signup fulfillment. Missing values default to the framework so that
 // pre-existing tokens, links, and API calls stay valid (backward compatible).
+//
+// #43: the canonical product ids are **FW** (framework) and **TMT** (test
+// management). The legacy ids `cc-testframework` / `cc-tmgmt` still appear in
+// existing Keygen license metadata, Stripe `app_product` metadata and in-flight
+// client/CMS payloads, so every resolver below ACCEPTS the legacy ids too and
+// maps them to the canonical ones. (These are entitlement/license products; the
+// sellable "BOTH" bundle is a plan, not a ProductId — see plans.ts / #42.)
 
-export type ProductId = "cc-testframework" | "cc-tmgmt";
+export type ProductId = "FW" | "TMT";
 
-export const DEFAULT_PRODUCT: ProductId = "cc-testframework";
+export const DEFAULT_PRODUCT: ProductId = "FW";
 
-export const PRODUCT_IDS: ProductId[] = ["cc-testframework", "cc-tmgmt"];
+export const PRODUCT_IDS: ProductId[] = ["FW", "TMT"];
 
 /** Customer-facing marketing names. */
 export const PRODUCT_LABELS: Record<ProductId, string> = {
-  "cc-testframework": "CC-Testframework",
-  "cc-tmgmt": "CC Test Management",
+  FW: "CC-Testframework",
+  TMT: "CC Test Management",
 };
 
 /**
  * URL slug of each product's detail/pricing pages (e.g. /cc-testmanagement,
- * /cc-testmanagement/pricing). Kept here as the single source of truth — the
- * checkout cancel URL and the public products API both build links from it.
+ * /cc-testmanagement/pricing). These are stable page paths and are deliberately
+ * NOT renamed by #43 (SEO / existing links). Single source of truth for the
+ * checkout cancel URL and the public products API links.
  */
 export const PRODUCT_SLUGS: Record<ProductId, string> = {
-  "cc-testframework": "cc-testframework",
-  "cc-tmgmt": "cc-testmanagement",
+  FW: "cc-testframework",
+  TMT: "cc-testmanagement",
 };
 
-/** Coerce an unknown/legacy value into a supported ProductId (defaults to framework). */
+// Canonical + legacy identifiers → canonical ProductId. Keep the legacy ids for
+// backward compatibility (existing licenses/Stripe metadata/in-flight clients).
+const PRODUCT_ALIASES: Record<string, ProductId> = {
+  FW: "FW",
+  TMT: "TMT",
+  "cc-testframework": "FW",
+  "cc-tmgmt": "TMT",
+};
+
+/** Exact match against a known id (canonical OR legacy), else null. */
+export function coerceProduct(value: unknown): ProductId | null {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(PRODUCT_ALIASES, value)
+    ? PRODUCT_ALIASES[value]
+    : null;
+}
+
+/** Lenient: coerce an unknown/legacy value into a ProductId (defaults to FW). */
 export function resolveProduct(value: unknown): ProductId {
-  return value === "cc-tmgmt" ? "cc-tmgmt" : DEFAULT_PRODUCT;
+  return coerceProduct(value) ?? DEFAULT_PRODUCT;
 }
 
 export function productLabel(value: unknown): string {
@@ -37,23 +61,28 @@ export function productLabel(value: unknown): string {
 
 /**
  * Which products the site currently offers, controlled by the `PRODUCTS_OFFERED`
- * env var (comma-separated product ids). Server-side only.
+ * env var (comma-separated product ids; canonical FW/TMT or legacy accepted).
+ * Server-side only.
  *
- *   PRODUCTS_OFFERED="cc-testframework"            → only CC-Testframework
- *   PRODUCTS_OFFERED="cc-tmgmt"                    → only CC Test Management
- *   PRODUCTS_OFFERED="cc-testframework,cc-tmgmt"   → both
- *   (unset / empty / unrecognized)                → both (default)
+ *   PRODUCTS_OFFERED="FW"        → only CC-Testframework
+ *   PRODUCTS_OFFERED="TMT"       → only CC Test Management
+ *   PRODUCTS_OFFERED="FW,TMT"    → both
+ *   (unset / empty / unrecognized) → both (default)
  *
  * Order follows PRODUCT_IDS, not the env string, so the overview layout is stable.
  */
 export function offeredProducts(): ProductId[] {
   const raw = process.env.PRODUCTS_OFFERED?.trim();
   if (!raw) return [...PRODUCT_IDS];
-  const requested = raw.split(",").map((s) => s.trim());
-  const offered = PRODUCT_IDS.filter((id) => requested.includes(id));
+  const requested = raw
+    .split(",")
+    .map((s) => coerceProduct(s.trim()))
+    .filter((p): p is ProductId => p !== null);
   // A misconfigured value (nothing valid) falls back to offering everything
   // rather than taking the whole site down.
-  return offered.length > 0 ? offered : [...PRODUCT_IDS];
+  return requested.length > 0
+    ? PRODUCT_IDS.filter((id) => requested.includes(id))
+    : [...PRODUCT_IDS];
 }
 
 export function isOffered(product: ProductId): boolean {
@@ -64,7 +93,7 @@ export function isOffered(product: ProductId): boolean {
  * Whether the sales-vetted onboarding gate is active for a product. Server-side.
  *
  *   SALES_VETTED_MODE        → global default (and the framework's control)
- *   SALES_VETTED_MODE_TMGMT  → per-product override for cc-tmgmt
+ *   SALES_VETTED_MODE_TMGMT  → per-product override for TMT
  *                              ("true"/"false"; unset → inherits the global)
  *
  * When vetting is OFF for a product, its trial is self-served directly at
@@ -73,7 +102,7 @@ export function isOffered(product: ProductId): boolean {
  */
 export function isVetted(product: ProductId): boolean {
   const global = process.env.SALES_VETTED_MODE === "true";
-  if (product === "cc-tmgmt") {
+  if (product === "TMT") {
     const override = process.env.SALES_VETTED_MODE_TMGMT;
     if (override === "true") return true;
     if (override === "false") return false;

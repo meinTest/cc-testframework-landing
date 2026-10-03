@@ -12,20 +12,20 @@ export default async function ManagementPage({
 }: {
   searchParams: SearchParams;
 }) {
-  if (!isOffered("cc-tmgmt")) notFound();
+  if (!isOffered("TMT")) notFound();
 
   const { lang: langParam } = await searchParams;
   const lang = resolveLang(langParam);
   const t = content[lang];
   const p = t.mgmt;
 
-  const primaryCta = isVetted("cc-tmgmt")
+  const primaryCta = isVetted("TMT")
     ? {
-        href: withLang("/demo-request?product=cc-tmgmt", lang),
+        href: withLang("/demo-request?product=TMT", lang),
         label: t.common.requestDemo,
       }
     : {
-        href: withLang("/signup?product=cc-tmgmt", lang),
+        href: withLang("/signup?product=TMT", lang),
         label: t.common.startTrial,
       };
 

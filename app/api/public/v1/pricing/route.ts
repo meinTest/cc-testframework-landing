@@ -1,11 +1,11 @@
-import { offeredProducts, type ProductId } from "../../../../products";
+import { coerceProduct, offeredProducts } from "../../../../products";
 import { CURRENCIES, YEARLY_DISCOUNT_PCT, type Currency } from "../../../../pricing";
 import { getDisplayPrices, getStripePricing } from "../../../../lib/stripe-pricing";
 import { publicJson, publicError, preflight } from "../../../lib/public-http";
 
 // Public, read-only pricing for the CMS. Live Stripe amounts where present, else
 // the in-code fallback (source flag says which). Optional query params:
-//   ?product=cc-tmgmt   → just that product (default: all offered)
+//   ?product=TMT       → just that product (default: all offered)
 //   ?currency=EUR       → just that currency (default: CHF, EUR, USD)
 // Returns whole-unit amounts only — never Stripe price IDs or other internals.
 
@@ -19,9 +19,11 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const offered = offeredProducts();
 
-  // Validate optional filters strictly (no silent coercion of unknown values).
+  // Optional product filter. Accept canonical (FW/TMT) and legacy (cc-*) ids
+  // (coerceProduct), but the resolved product must be offered.
   const productParam = params.get("product");
-  if (productParam && !offered.includes(productParam as ProductId)) {
+  const requestedProduct = productParam ? coerceProduct(productParam) : null;
+  if (productParam && (!requestedProduct || !offered.includes(requestedProduct))) {
     return publicError(
       request,
       404,
@@ -39,7 +41,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const productIds = productParam ? [productParam as ProductId] : offered;
+  const productIds = requestedProduct ? [requestedProduct] : offered;
   const currencies = currencyParam
     ? [currencyParam as Currency]
     : [...CURRENCIES];

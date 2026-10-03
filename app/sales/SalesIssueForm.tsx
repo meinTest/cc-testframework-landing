@@ -24,7 +24,7 @@ export default function SalesIssueForm({ products }: SalesIssueFormProps) {
   const [result, setResult] = useState<IssueResponse | null>(null);
   const [autoEmail, setAutoEmail] = useState(false);
   const [product, setProduct] = useState<ProductId>(
-    products[0]?.id ?? "cc-testframework",
+    products[0]?.id ?? "FW",
   );
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
