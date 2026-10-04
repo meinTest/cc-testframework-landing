@@ -45,11 +45,17 @@ and the feedback gate treat `valid !== true` as **not entitled** — so installi
 with no active run.
 
 Installing ≠ running — install must not consume a concurrency seat. So the
-entitlement check must be made **tolerant of `NO_MACHINE`/`NO_MACHINES`**: treat
-the license as entitled for install/status/feedback (it's a valid license that
-simply has no live lease right now). **Only the run-time lease
-(activate + heartbeat) enforces concurrency.** This is a required code change,
-not just config — see the landing ticket.
+entitlement check is **tolerant of `NO_MACHINE`/`NO_MACHINES`**: the license is
+treated as entitled for install/status/feedback (it's a valid license that simply
+has no live lease right now). **Only the run-time lease (activate + heartbeat)
+enforces concurrency.**
+
+**Implemented (#47):** `isEffectivelyValid()` in `app/api/tmgmt/lib/entitlement.ts`
+returns true for `valid` OR `NO_MACHINE`/`NO_MACHINES` (but not EXPIRED/
+SUSPENDED/BANNED/NOT_FOUND). It gates `checkEntitlement` (npm broker, feedback),
+`licenseStatus`/`describeLicense` (status), the QA-channel verdict and the
+billing/checkout lookups. The raw Keygen `valid` flag is still reported verbatim
+on `/license/status`; `entitled` is what tolerates the dormant lease.
 
 ## Proxy endpoints (this repo)
 

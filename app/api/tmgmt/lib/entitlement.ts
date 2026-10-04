@@ -19,6 +19,25 @@ const DEFAULT_ALLOWED: readonly ProductId[] = [PRODUCT];
 // diverge. (The TMT-only resources download/updates keep DEFAULT_ALLOWED.)
 export const ENTITLED_PRODUCTS: readonly ProductId[] = ["FW", "TMT"];
 
+// Codes from an unscoped validate-key that mean "the license itself is fine, it
+// just has no live machine/lease right now": a floating-concurrency license
+// (requireHeartbeat, #47) between runs, or a device-bound license before its
+// first activation. Install / status / feedback must treat these as entitled —
+// installing ≠ running, and only the run-time lease (activate + heartbeat)
+// enforces concurrency. See docs/license-concurrency.md. EXPIRED / SUSPENDED /
+// BANNED / NOT_FOUND are deliberately NOT here (those stay hard failures).
+const NO_LIVE_MACHINE_CODES = ["NO_MACHINE", "NO_MACHINES"];
+
+/**
+ * Whether a validate-key body counts as entitled for install/status/feedback:
+ * either Keygen says `valid`, or it says invalid ONLY because there is no live
+ * machine (NO_MACHINE/NO_MACHINES). Exported for unit testing.
+ */
+export function isEffectivelyValid(body: KeygenValidation): boolean {
+  if (body?.meta?.valid === true) return true;
+  return NO_LIVE_MACHINE_CODES.includes(body?.meta?.code ?? "");
+}
+
 export type EntitlementResult =
   | { ok: true; licenseId: string; company: string; internal: boolean }
   | { ok: false; status: number; reason: string };
@@ -83,8 +102,9 @@ export async function checkEntitlement(
   const body = await validateKey(licenseKey);
   if (!body) return { ok: false, status: 502, reason: "License validation unavailable" };
 
-  const valid = body?.meta?.valid === true;
-  if (!valid) {
+  // Tolerate a valid license that simply has no live machine (floating lease
+  // between runs) — install/status/feedback stay available (#47).
+  if (!isEffectivelyValid(body)) {
     return { ok: false, status: 403, reason: body?.meta?.code ?? "License not valid" };
   }
 
@@ -120,8 +140,7 @@ export type QaEntitlement =
  * 403 `qa-channel-not-entitled` (never 404) so a misconfiguration is visible.
  */
 export function qaChannelVerdict(body: KeygenValidation): QaEntitlement {
-  const valid = body?.meta?.valid === true;
-  if (!valid) return { ok: false, status: 401, error: "invalid-key" };
+  if (!isEffectivelyValid(body)) return { ok: false, status: 401, error: "invalid-key" };
   const product = resolveProductId(body);
   if (product === null || !ENTITLED_PRODUCTS.includes(product)) {
     return { ok: false, status: 403, error: "qa-channel-not-entitled" };
@@ -197,12 +216,14 @@ export async function describeLicense(
   const body = await validateKey(licenseKey);
   if (!body) return { ok: false, status: 502, message: "License validation unavailable" };
 
-  const valid = body?.meta?.valid === true;
+  // A valid license with no live machine still describes fine (floating lease
+  // between runs / pre-activation) — only EXPIRED/SUSPENDED/NOT_FOUND fail (#47).
+  const effective = isEffectivelyValid(body);
   const code = body?.meta?.code;
   const metadata = body?.data?.attributes?.metadata ?? {};
   const product = resolveProductId(body);
 
-  if (valid && product === PRODUCT) {
+  if (effective && product === PRODUCT) {
     const licenseId = body?.data?.id ?? "";
     return {
       ok: true,
@@ -223,7 +244,7 @@ export async function describeLicense(
   if (code === "SUSPENDED" || code === "BANNED") {
     return { ok: false, status: 403, reason: "invalid", message: "License suspended" };
   }
-  if (valid && product !== PRODUCT) {
+  if (effective && product !== PRODUCT) {
     return {
       ok: false,
       status: 403,
@@ -289,17 +310,21 @@ export async function licenseStatus(
   const body = await validateKey(licenseKey);
   if (!body) return { kind: "unavailable" };
 
+  // `valid` is the RAW Keygen verdict (mirrors what the client would get asking
+  // Keygen directly); `effective` additionally treats a valid-but-no-live-machine
+  // license as usable (floating lease between runs, #47) for entitlement/billing.
   const valid = body?.meta?.valid === true;
+  const effective = isEffectivelyValid(body);
   const code = body?.meta?.code ?? (valid ? "VALID" : "INVALID");
   const metadata = body?.data?.attributes?.metadata ?? {};
   const product = resolveProductId(body);
-  // Same rule as the npm broker / feedback: valid AND product ∈ ENTITLED_PRODUCTS.
-  const entitled = valid && product !== null && ENTITLED_PRODUCTS.includes(product);
+  // Same rule as the npm broker / feedback: entitled AND product ∈ ENTITLED_PRODUCTS.
+  const entitled = effective && product !== null && ENTITLED_PRODUCTS.includes(product);
   // Manageable when tied to a Stripe subscription (paid) → "manage/cancel" (#13);
   // upgradeable when it's a trial with no subscription → "upgrade to paid" (#14).
   const hasSubscription = asString(metadata.subscriptionId).length > 0;
-  const manageable = valid && hasSubscription;
-  const upgradeable = valid && entitled && !hasSubscription && isTrialPolicy(body);
+  const manageable = effective && hasSubscription;
+  const upgradeable = effective && entitled && !hasSubscription && isTrialPolicy(body);
 
   return {
     kind: "ok",
@@ -341,7 +366,7 @@ export async function licenseBillingRef(
 
   const body = await validateKey(licenseKey);
   if (!body) return { kind: "unavailable" };
-  if (body?.meta?.valid !== true) return { kind: "invalid" };
+  if (!isEffectivelyValid(body)) return { kind: "invalid" };
 
   const product = resolveProductId(body);
   if (product === null || !ENTITLED_PRODUCTS.includes(product)) {
@@ -403,7 +428,7 @@ export async function licenseCheckoutInfo(
 
   const body = await validateKey(licenseKey);
   if (!body) return { kind: "unavailable" };
-  if (body?.meta?.valid !== true) return { kind: "invalid" };
+  if (!isEffectivelyValid(body)) return { kind: "invalid" };
 
   const product = resolveProductId(body);
   if (product === null || !ENTITLED_PRODUCTS.includes(product)) {

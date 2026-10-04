@@ -1,7 +1,7 @@
 import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { qaChannelVerdict } from "../../app/api/tmgmt/lib/entitlement";
+import { qaChannelVerdict, isEffectivelyValid } from "../../app/api/tmgmt/lib/entitlement";
 import { GET as QA_UPDATE } from "../../app/api/tmgmt/updates/qa/[file]/route";
 import { GET as DOWNLOAD } from "../../app/api/tmgmt/download/route";
 
@@ -42,6 +42,35 @@ describe("qaChannelVerdict", () => {
   test("invalid key → 401 invalid-key", () => {
     const v = qaChannelVerdict(mockBody({ product: "cc-tmgmt", channel: "qa" }, false));
     assert.deepEqual(v, { ok: false, status: 401, error: "invalid-key" });
+  });
+
+  test("no live machine (NO_MACHINES) but entitled + channel:qa → ok (install ≠ run, #47)", () => {
+    const body = {
+      meta: { valid: false, code: "NO_MACHINES" },
+      data: { id: "lic1", attributes: { metadata: { product: "cc-tmgmt", channel: "qa" } } },
+    };
+    assert.deepEqual(qaChannelVerdict(body), { ok: true, licenseId: "lic1" });
+  });
+});
+
+describe("isEffectivelyValid (#47 — install/status/feedback tolerate a dormant lease)", () => {
+  const withCode = (valid: boolean, code?: string) => ({ meta: { valid, code }, data: { id: "l" } });
+
+  test("valid → true", () => {
+    assert.equal(isEffectivelyValid(withCode(true, "VALID")), true);
+  });
+  test("NO_MACHINE / NO_MACHINES → true (valid license, no live lease)", () => {
+    assert.equal(isEffectivelyValid(withCode(false, "NO_MACHINE")), true);
+    assert.equal(isEffectivelyValid(withCode(false, "NO_MACHINES")), true);
+  });
+  test("EXPIRED / SUSPENDED / BANNED / NOT_FOUND → false (hard failures)", () => {
+    for (const code of ["EXPIRED", "SUSPENDED", "BANNED", "NOT_FOUND"]) {
+      assert.equal(isEffectivelyValid(withCode(false, code)), false, code);
+    }
+  });
+  test("missing meta/code → false", () => {
+    assert.equal(isEffectivelyValid({ data: { id: "l" } }), false);
+    assert.equal(isEffectivelyValid(withCode(false)), false);
   });
 });
 
