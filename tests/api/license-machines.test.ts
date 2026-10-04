@@ -119,6 +119,16 @@ describe("licenseIdentity (paid/product resolved from policy)", () => {
     const id = licenseIdentity(body({ email: "a@acme.test", subscriptionId: "sub_1" }, "whatever"));
     assert.equal(id.isPaid, true);
   });
+
+  test("canonical policy names (TMT-Paid / FW-Trial) resolve the product", () => {
+    const tmt = licenseIdentity(body({ email: "a@acme.test" }, "TMT-Paid"));
+    assert.equal(tmt.product, "TMT");
+    assert.equal(tmt.isPaid, true);
+
+    const fw = licenseIdentity(body({ email: "a@acme.test" }, "FW-Trial"));
+    assert.equal(fw.product, "FW");
+    assert.equal(fw.isPaid, false);
+  });
 });
 
 describe("machineMetaPatch (update name/platform on re-activation)", () => {

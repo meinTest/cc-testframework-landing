@@ -318,9 +318,10 @@ function productFromPolicy(policy: { id: string | null; name: string | null }): 
   const tmgmt = [process.env.KEYGEN_TMGMT_TRIAL_POLICY_ID, process.env.KEYGEN_TMGMT_PAID_POLICY_ID];
   if (policy.id && framework.includes(policy.id)) return "FW";
   if (policy.id && tmgmt.includes(policy.id)) return "TMT";
+  // Name fallback: canonical FW-* / TMT-* (post-rename) OR legacy cc-* names.
   const name = (policy.name ?? "").toLowerCase();
-  if (name.includes("cc-tmgmt")) return "TMT";
-  if (name.includes("cc-testframework")) return "FW";
+  if (name.startsWith("tmt") || name.includes("cc-tmgmt")) return "TMT";
+  if (name.startsWith("fw") || name.includes("cc-testframework")) return "FW";
   return null;
 }
 

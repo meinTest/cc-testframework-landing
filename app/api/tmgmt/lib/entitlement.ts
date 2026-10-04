@@ -476,8 +476,9 @@ export async function validateKey(licenseKey: string): Promise<KeygenValidation 
  *   1. explicit license metadata.product (set by our own signup flow);
  *   2. the license's policy id matched against the configured per-product env
  *      policies (trial/paid);
- *   3. the policy name convention (cc-testframework-* / cc-tmgmt-*), which covers
- *      licenses created straight off a product policy with no metadata (Issue #9).
+ *   3. the policy name convention (FW-* / TMT-*, or legacy cc-testframework-* /
+ *      cc-tmgmt-*), which covers licenses created straight off a product policy
+ *      with no metadata (Issue #9).
  * Returns null when the product cannot be determined → treated as not entitled.
  */
 function resolveProductId(body: KeygenValidation): ProductId | null {
@@ -494,10 +495,11 @@ function resolveProductId(body: KeygenValidation): ProductId | null {
   const fromPolicyId = productFromPolicyId(policy.id);
   if (fromPolicyId) return fromPolicyId;
 
-  // Policy names are unchanged by #43 (cc-tmgmt-* / cc-testframework-*).
+  // Policy-name fallback: canonical FW-* / TMT-* (post-rename) OR legacy
+  // cc-testframework-* / cc-tmgmt-* names.
   const name = (policy.name ?? "").toLowerCase();
-  if (name.includes("cc-tmgmt")) return "TMT";
-  if (name.includes("cc-testframework")) return "FW";
+  if (name.startsWith("tmt") || name.includes("cc-tmgmt")) return "TMT";
+  if (name.startsWith("fw") || name.includes("cc-testframework")) return "FW";
 
   return null;
 }
