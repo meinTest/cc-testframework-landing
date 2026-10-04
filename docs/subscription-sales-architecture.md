@@ -1,6 +1,6 @@
 # Abo-/Verkaufsmodell — Architektur, Verrechnung & Lizenz-Provisionierung
 
-**Zweck:** Framework **und** CC Test Management als **Abo** (Self-Service) + **Einmalkauf**
+**Zweck:** Framework **und** Verify Test Management als **Abo** (Self-Service) + **Einmalkauf**
 (Preis auf Anfrage), inkl. Seat-basierter Lizenzierung und Ausbaustufe „Kunde verwaltet Lizenzen
 selbst". Maßgebliche Referenz. Stand 2026-07-17.
 

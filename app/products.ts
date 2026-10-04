@@ -20,7 +20,7 @@ export const PRODUCT_IDS: ProductId[] = ["FW", "TMT"];
 /** Customer-facing marketing names. */
 export const PRODUCT_LABELS: Record<ProductId, string> = {
   FW: "CC-Testframework",
-  TMT: "CC Test Management",
+  TMT: "Verify Test Management",
 };
 
 /**
@@ -65,7 +65,7 @@ export function productLabel(value: unknown): string {
  * Server-side only.
  *
  *   PRODUCTS_OFFERED="FW"        → only CC-Testframework
- *   PRODUCTS_OFFERED="TMT"       → only CC Test Management
+ *   PRODUCTS_OFFERED="TMT"       → only Verify Test Management
  *   PRODUCTS_OFFERED="FW,TMT"    → both
  *   (unset / empty / unrecognized) → both (default)
  *

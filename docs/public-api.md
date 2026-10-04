@@ -64,7 +64,7 @@ curl https://app.itsbusiness.ch/api/public/v1/products
     },
     {
       "id": "cc-tmgmt",
-      "name": "CC Test Management",
+      "name": "Verify Test Management",
       "slug": "cc-testmanagement",
       "offered": true,
       "cta": {
@@ -196,7 +196,7 @@ CORS-locked to `PUBLIC_API_ALLOWED_ORIGINS`.
 | `plan` | Delivers | Welcome mail(s) |
 |---|---|---|
 | `starter-framework` | CC-Testframework | Framework (npm setup) |
-| `starter-tmt` | CC Test Management | TMT (app download + access code) |
+| `starter-tmt` | Verify Test Management | TMT (app download + access code) |
 | `professional` | both | both |
 
 A trial is free — `cycle`/`currency` are only a stored preference for the later
@@ -214,7 +214,7 @@ curl -X POST https://app.itsbusiness.ch/api/public/v1/signup \
 ```
 
 ```json
-{ "ok": true, "message": "Trial activated. Check your email for your setup instructions for CC Test Management and CC-Testframework." }
+{ "ok": true, "message": "Trial activated. Check your email for your setup instructions for Verify Test Management and CC-Testframework." }
 ```
 
 ### Responses

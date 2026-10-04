@@ -17,7 +17,7 @@ Eine **Next.js 16 (App Router)**-App, deployed auf **Vercel**, erreichbar unter
 
 1. **Marketing-Landing** (zweisprachig DE/EN, DE Default).
 2. **Lizenz-/Onboarding-/Delivery-/Billing-Proxy** für zwei Produkte:
-   - **TMT** (`cc-tmgmt`, „CC Test Management") — Electron-Desktop-App.
+   - **TMT** (`cc-tmgmt`, „Verify Test Management") — Electron-Desktop-App.
    - **FW** (`cc-testframework`, „CC-Testframework") — npm-Paket `@meintest/cc-testframework`.
 
 Angebundene Systeme:
@@ -124,7 +124,7 @@ authentifiziert sich überall mit seinem **Keygen-Lizenzschlüssel**.
 ### Produkte (Entitlement)
 | Id (heute) | Name | Auslieferung |
 |---|---|---|
-| `cc-tmgmt` (→ TMT) | CC Test Management | Electron-App via Download/Update-Proxy |
+| `cc-tmgmt` (→ TMT) | Verify Test Management | Electron-App via Download/Update-Proxy |
 | `cc-testframework` (→ FW) | CC-Testframework | npm `@meintest/cc-testframework` via npm-Proxy |
 
 **Entitlement-Regel (wichtig):**

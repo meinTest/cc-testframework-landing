@@ -31,7 +31,7 @@ const PRODUCT_META: Record<ProductId, { title: string; description: string }> = 
   },
   TMT: {
     title:
-      "CC Test Management — Git-basiertes Test-Management als lokale Windows-App",
+      "Verify Test Management — Git-basiertes Test-Management als lokale Windows-App",
     description:
       "Git-basiertes Test-Management-Tool: Fachtester bearbeiten TypeScript-Test-Specs, ganz ohne Git-Handgriffe. Nutzt CC-Testframework als Engine.",
   },
@@ -45,9 +45,9 @@ export async function generateMetadata(): Promise<Metadata> {
   }
   return {
     title:
-      "CC-Testframework & CC Test Management — Test-Toolchain für Web, Desktop & Mobile",
+      "CC-Testframework & Verify Test Management — Test-Toolchain für Web, Desktop & Mobile",
     description:
-      "Zwei Werkzeuge für konsistentes Testen: das TypeScript-Test-Framework CC-Testframework und das Git-basierte Test-Management-Tool CC Test Management.",
+      "Zwei Werkzeuge für konsistentes Testen: das TypeScript-Test-Framework CC-Testframework und das Git-basierte Test-Management-Tool Verify Test Management.",
   };
 }
 

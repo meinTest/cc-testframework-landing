@@ -84,7 +84,7 @@ describe("successMessage", () => {
   test("both products → names both labels", () => {
     assert.match(
       successMessage(["TMT", "FW"], false),
-      /CC Test Management and CC-Testframework/,
+      /Verify Test Management and CC-Testframework/,
     );
   });
   test("dry-run wording regardless of products", () => {

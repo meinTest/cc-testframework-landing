@@ -46,7 +46,7 @@ describe("GET /api/public/v1/products", () => {
     assert.ok(!Number.isNaN(Date.parse(body.generatedAt)));
 
     const tmgmt = body.products.find((p) => p.id === "TMT")!;
-    assert.equal(tmgmt.name, "CC Test Management");
+    assert.equal(tmgmt.name, "Verify Test Management");
     assert.equal(tmgmt.slug, "cc-testmanagement");
     assert.equal(tmgmt.offered, true);
     assert.equal(tmgmt.pricingUrl, `${BASE}/cc-testmanagement/pricing`);
