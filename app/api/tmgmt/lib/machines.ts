@@ -73,6 +73,10 @@ export type DeactivateResult =
   | { ok: true }
   | { ok: false; status: number; reason: "invalid" | "not-found" | "forbidden" | "unavailable"; message: string };
 
+export type HeartbeatResult =
+  | { ok: true; heartbeatDuration: number | null }
+  | { ok: false; status: number; reason: "invalid" | "not-found" | "forbidden" | "unavailable"; message: string };
+
 // --- public API -------------------------------------------------------------
 
 export async function activateDevice(
@@ -217,6 +221,79 @@ export async function deactivateDevice(
     return { ok: false, status: 502, reason: "unavailable", message: "Could not free the device" };
   }
   return { ok: true };
+}
+
+// Extend a run's floating lease (#47, framework concurrency). The framework pings
+// periodically so Keygen keeps the machine (lease) alive; a crashed run stops
+// pinging and Keygen auto-culls it after heartbeatDuration, freeing the seat
+// (see docs/license-concurrency.md). Bearer-scoped + ownership-checked (the
+// machine must belong to THIS license). Like DELETE, only a hard-invalid key is
+// rejected — a heartbeat just extends an EXISTING lease; concurrency/entitlement
+// is enforced at activate + validate-key, not here.
+//
+// A real "lease gone" verdict ALWAYS returns status 404 (so the route emits a
+// JSON `reason`), which the framework runtime uses to tell a culled lease apart
+// from a missing-route 404 (endpoint not deployed).
+export async function pingHeartbeat(
+  licenseKey: string,
+  machineId: string,
+  dryRun: boolean,
+): Promise<HeartbeatResult> {
+  if (!licenseKey) return { ok: false, status: 401, reason: "invalid", message: "Missing license key" };
+  if (!machineId) return { ok: false, status: 404, reason: "not-found", message: "Device not found" };
+
+  if (dryRun) {
+    // Magic machine ids let the framework tests hit the real endpoint without
+    // consuming a seat (mirrors activate's DRYRUN_* fingerprints).
+    if (machineId === "DRYRUN_GONE") {
+      return { ok: false, status: 404, reason: "not-found", message: "Lease no longer exists" };
+    }
+    if (machineId === "DRYRUN_FORBIDDEN") {
+      return { ok: false, status: 403, reason: "forbidden", message: "Not your device" };
+    }
+    return { ok: true, heartbeatDuration: 120 };
+  }
+
+  const body = await validateKey(licenseKey);
+  if (!body) return { ok: false, status: 502, reason: "unavailable", message: "License validation unavailable" };
+  const base = classifyBaseValidity(body);
+  if (base && base.reason === "invalid") {
+    return { ok: false, status: 401, reason: "invalid", message: "Invalid license key" };
+  }
+  const licenseId = body?.data?.id ?? "";
+  if (!licenseId) return { ok: false, status: 401, reason: "invalid", message: "Invalid license key" };
+
+  // Ownership — also the primary "lease gone" path (a culled machine 404s here).
+  let owner: string | null;
+  try {
+    owner = await machineLicenseId(machineId);
+  } catch (e) {
+    console.error(`${LOG_PREFIX} heartbeat: read machine ${machineId} failed`, e);
+    return { ok: false, status: 502, reason: "unavailable", message: "Could not read the device lease" };
+  }
+  if (owner === null) return { ok: false, status: 404, reason: "not-found", message: "Lease no longer exists" };
+  if (owner !== licenseId) return { ok: false, status: 403, reason: "forbidden", message: "Not your device" };
+
+  const res = await fetch(
+    `${KEYGEN}/${accountId()}/machines/${encodeURIComponent(machineId)}/actions/ping-heartbeat`,
+    { method: "POST", headers: adminHeaders() },
+  );
+  if (res.ok) {
+    const b = await res.json().catch(() => null);
+    const hb = b?.data?.attributes?.heartbeatDuration;
+    return { ok: true, heartbeatDuration: typeof hb === "number" ? hb : null };
+  }
+  if (res.status === 404) {
+    return { ok: false, status: 404, reason: "not-found", message: "Lease no longer exists" };
+  }
+  // A dead heartbeat can come back as 422 — treat it as a gone lease too (→404).
+  const errBody = await res.json().catch(() => null);
+  const codes = extractErrorCodes(errBody).map((c) => c.toUpperCase());
+  if (res.status === 422 && codes.some((c) => c.includes("HEARTBEAT") || c.includes("DEAD"))) {
+    return { ok: false, status: 404, reason: "not-found", message: "Lease is dead" };
+  }
+  console.error(`${LOG_PREFIX} heartbeat ping ${machineId} failed HTTP ${res.status}`, codes);
+  return { ok: false, status: 502, reason: "unavailable", message: "Could not extend the lease" };
 }
 
 // --- Keygen plumbing --------------------------------------------------------

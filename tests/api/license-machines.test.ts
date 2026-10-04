@@ -13,6 +13,7 @@ import {
 import { POST as ACTIVATE } from "../../app/api/license/activate/route";
 import { GET as LIST_MACHINES } from "../../app/api/license/machines/route";
 import { DELETE as FREE_MACHINE } from "../../app/api/license/machines/[machineId]/route";
+import { POST as PING } from "../../app/api/license/machines/[machineId]/ping/route";
 
 // #29 — device/seat binding. Pure classifiers are unit-tested; the routes are
 // exercised in DRY_RUN (network-free).
@@ -213,5 +214,44 @@ describe("GET /api/license/machines + DELETE (DRY_RUN)", () => {
     const res = await FREE_MACHINE(req, { params: Promise.resolve({ machineId: "m1" }) });
     assert.equal(res.status, 200);
     assert.equal(((await res.json()) as { ok: boolean }).ok, true);
+  });
+});
+
+describe("POST /api/license/machines/<id>/ping — heartbeat (DRY_RUN, #47)", () => {
+  function pingReq(opts: { key?: string } = {}): Request {
+    const headers = new Headers();
+    if (opts.key) headers.set("authorization", `Bearer ${opts.key}`);
+    return new Request(`${BASE}/api/license/machines/m1/ping`, { method: "POST", headers });
+  }
+  const ping = (machineId: string, opts: { key?: string } = {}) =>
+    PING(pingReq(opts), { params: Promise.resolve({ machineId }) });
+
+  test("extends the lease → 200 { ok, heartbeatDuration }", async () => {
+    const res = await ping("m1", { key: "k" });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { ok: boolean; heartbeatDuration: number };
+    assert.equal(body.ok, true);
+    assert.equal(body.heartbeatDuration, 120);
+    assert.equal(res.headers.get("cache-control"), "no-store");
+  });
+
+  test("missing key → 401 invalid", async () => {
+    const res = await ping("m1");
+    assert.equal(res.status, 401);
+    assert.equal(((await res.json()) as { reason: string }).reason, "invalid");
+  });
+
+  test("gone lease → 404 WITH a JSON reason (distinguishable from a missing route)", async () => {
+    const res = await ping("DRYRUN_GONE", { key: "k" });
+    assert.equal(res.status, 404);
+    const body = (await res.json()) as { ok: boolean; reason: string };
+    assert.equal(body.ok, false);
+    assert.equal(body.reason, "not-found");
+  });
+
+  test("foreign machine → 403 forbidden", async () => {
+    const res = await ping("DRYRUN_FORBIDDEN", { key: "k" });
+    assert.equal(res.status, 403);
+    assert.equal(((await res.json()) as { reason: string }).reason, "forbidden");
   });
 });
