@@ -384,9 +384,9 @@ async function sendWelcome(
       // cc-testframework: installs from the license-brokered npm registry with the
       // same key — no GitHub account required.
       const quickstartUrlEn =
-        process.env.QUICKSTART_URL_EN ?? "https://meintest.github.io/cc-testframework/en/quickstart/";
+        process.env.QUICKSTART_URL_EN ?? "https://meintest.github.io/cc-testframework/en/quickstart";
       const quickstartUrlDe =
-        process.env.QUICKSTART_URL_DE ?? "https://meintest.github.io/cc-testframework/de/quickstart/";
+        process.env.QUICKSTART_URL_DE ?? "https://meintest.github.io/cc-testframework/de/quickstart";
       await sendWelcomeEmail(
         {
           toEmail: input.email,

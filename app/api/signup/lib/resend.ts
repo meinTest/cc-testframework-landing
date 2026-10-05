@@ -92,8 +92,11 @@ export async function sendWelcomeEmail(
     <p>your trial is ready. ${expiryLine}</p>
     <h2>1. Configure your license key</h2>
     <p>Set this environment variable on the machine that runs the tests. The same
-       key also authenticates the package registry — no GitHub account required:</p>
+       key also authenticates the package registry:</p>
     <pre>CC_LICENSE_KEY=${escape(input.licenseKey)}</pre>
+    <p style="color:#64748b;font-size:13px">Keep this key safe — it authenticates
+       the package registry and is tied to your license; if it expires or is
+       revoked, installs and updates will stop.</p>
     <h2>2. Point npm at the license-gated registry</h2>
     <p>Add this to your project's <code>.npmrc</code>:</p>
     <pre>${escape(npmrc)}</pre>
@@ -117,8 +120,9 @@ export async function sendWelcomeEmail(
     ``,
     `your trial is ready. ${expiryLine.replace(/<[^>]+>/g, "")}`,
     ``,
-    `1. Configure your license (also authenticates the registry — no GitHub needed):`,
+    `1. Configure your license (also authenticates the registry):`,
     `   CC_LICENSE_KEY=${input.licenseKey}`,
+    `   Keep this key safe — it is tied to your license; if it expires or is revoked, installs and updates will stop.`,
     `2. Add this to your project's .npmrc:`,
     ...npmrc.split("\n").map((l) => `   ${l}`),
     `   then: npm install @meintest/cc-testframework`,
@@ -464,7 +468,7 @@ export async function sendTmgmtWelcome(
     text,
     attachments: [
       {
-        filename: "cc-test-management-license.pdf",
+        filename: "Verify-Test-Management-license.pdf",
         content: Buffer.from(licensePdf),
       },
     ],
