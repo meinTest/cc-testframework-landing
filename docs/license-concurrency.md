@@ -88,9 +88,12 @@ on `/license/status`; `entitled` is what tolerates the dormant lease.
 
 ## Limit = 1 vs. purchased seats
 
-Start with `maxMachines = 1` (addresses the abuse now). Later the limit can be
-driven by the subscription's seat count (set per-license `maxMachines` from the
-purchased quantity) so a customer paying for N seats gets N parallel runs.
+Start with `maxMachines = 1` (addresses the abuse now). **Implemented (#41):** the
+limit is driven by the subscription's seat count — provisioning sets the FW
+license's per-license `maxMachines` to the purchased `quantity` (one floating
+key), and a quantity change updates that single number in place (webhook
+`reconcile` → `reconcileFloating`). So a customer paying for N seats gets N
+parallel runs. TMT is unchanged (one device-bound key per seat).
 
 ## Related
 

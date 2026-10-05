@@ -463,6 +463,10 @@ export interface PaidLicenseInput {
   stripeCustomerId: string;
   seatIndex: number;
   expiresAt: string; // ISO — mirrors the Stripe subscription's current_period_end
+  // FW only (floating, #41): override the policy maxMachines with the purchased
+  // seat count, so ONE key permits N concurrent runs. Omitted for TMT, whose
+  // per-seat keys inherit the policy's maxMachines=1 (one device each).
+  maxMachines?: number;
 }
 
 export interface SubscriptionLicense {
@@ -478,7 +482,7 @@ export async function createPaidLicense(
 ): Promise<SubscriptionLicense> {
   if (dryRun) {
     console.log(
-      `${LOG_PREFIX} DRY_RUN — would create paid ${input.product} license (seat ${input.seatIndex}) for ${input.subscriptionId}`,
+      `${LOG_PREFIX} DRY_RUN — would create paid ${input.product} license (seat ${input.seatIndex}${input.maxMachines != null ? `, maxMachines=${input.maxMachines}` : ""}) for ${input.subscriptionId}`,
     );
     return {
       id: `dry-${input.subscriptionId}-${input.seatIndex}`,
@@ -507,6 +511,7 @@ export async function createPaidLicense(
           attributes: {
             name: `${input.company || "Subscription"} — seat ${input.seatIndex + 1}`,
             expiry: input.expiresAt,
+            ...(input.maxMachines != null ? { maxMachines: input.maxMachines } : {}),
             metadata: {
               product: input.product,
               kind: "paid",
@@ -614,6 +619,40 @@ export async function updateLicenseExpiry(
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Keygen updateLicenseExpiry failed: ${response.status} — ${text}`);
+  }
+}
+
+/**
+ * Set the per-license maxMachines override (FW floating seats, #41). For FW a
+ * quantity change updates this ONE number on the existing key instead of adding
+ * or suspending per-seat keys.
+ */
+export async function updateLicenseMaxMachines(
+  licenseId: string,
+  maxMachines: number,
+  dryRun: boolean,
+): Promise<void> {
+  if (dryRun) {
+    console.log(`${LOG_PREFIX} DRY_RUN — would set maxMachines=${maxMachines} on ${licenseId}`);
+    return;
+  }
+  const accountId = required("KEYGEN_ACCOUNT_ID");
+  const adminToken = required("KEYGEN_ADMIN_TOKEN");
+  const response = await fetch(
+    `https://api.keygen.sh/v1/accounts/${accountId}/licenses/${licenseId}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/vnd.api+json",
+        Accept: "application/vnd.api+json",
+      },
+      body: JSON.stringify({ data: { type: "licenses", attributes: { maxMachines } } }),
+    },
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Keygen updateLicenseMaxMachines failed: ${response.status} — ${text}`);
   }
 }
 

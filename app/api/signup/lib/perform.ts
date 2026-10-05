@@ -309,10 +309,15 @@ async function provisionStripeTrials(
     for (const s of subs) await cancelSubscription(s, dryRun);
   };
 
+  // Seats for the trial. One for now; #39 will source a per-product seat count
+  // from the signup (FW multi-seat trials). FW mirrors it onto the license as
+  // maxMachines (one floating key, #41); TMT stays single-seat (per-user key).
+  const seats = 1;
+
   for (const product of products) {
     try {
       const sub = await createTrialSubscription(
-        { customerId, product, cycle, currency, trialDays: days, seats: 1 },
+        { customerId, product, cycle, currency, trialDays: days, seats },
         dryRun,
       );
       if (!sub) {
@@ -333,6 +338,7 @@ async function provisionStripeTrials(
           stripeCustomerId: customerId,
           seatIndex: 0,
           expiresAt: sub.trialEndsAt,
+          ...(product === "FW" ? { maxMachines: seats } : {}),
         },
         dryRun,
       );

@@ -5,17 +5,21 @@ import {
   createPaidLicense,
   listSubscriptionLicenses,
   updateLicenseExpiry,
+  updateLicenseMaxMachines,
   suspendLicense,
   reinstateLicense,
   type SubscriptionLicense,
 } from "../../signup/lib/keygen";
+import type { ProductId } from "../../../products";
 import { sendSubscriptionKeys } from "../../signup/lib/resend";
 
-// Stripe → Keygen. Maps subscription lifecycle to one license/key per seat:
-//   paid/created/updated → ensure N active keys, expiry = current_period_end
-//   downgrade            → suspend surplus seats
-//   canceled             → suspend all seats
-// Idempotent via a per-seat metadata (subscriptionId + seatIndex).
+// Stripe → Keygen. Maps subscription lifecycle to Keygen licenses, by product:
+//   TMT → one key PER seat (device-bound): ensure N active keys, suspend surplus
+//         on downgrade, suspend all on cancel. Idempotent via subscriptionId +
+//         seatIndex metadata.
+//   FW  → ONE floating key with maxMachines = quantity (#41): a quantity change
+//         updates that single key's maxMachines in place — no per-seat keys.
+// Expiry always mirrors the subscription's current_period_end.
 
 const LOG_PREFIX = "[stripe][webhook]";
 
@@ -108,10 +112,42 @@ async function reconcile(
   }
 
   const existing = await listSubscriptionLicenses(subscriptionId, dryRun);
-  const bySeat = new Map<number, SubscriptionLicense>(
-    existing.map((l) => [l.seatIndex, l]),
-  );
+  const ctx: ReconcileCtx = {
+    product,
+    company,
+    email,
+    subscriptionId,
+    stripeCustomerId: sub.customer ? String(sub.customer) : "",
+    expiresAt,
+    dryRun,
+  };
 
+  if (product === "FW") {
+    await reconcileFloating(existing, quantity, ctx);
+  } else {
+    await reconcilePerSeat(existing, quantity, ctx);
+  }
+  console.log(`${LOG_PREFIX} reconciled ${subscriptionId}: ${product}, ${quantity} seat(s)`);
+}
+
+interface ReconcileCtx {
+  product: ProductId;
+  company: string;
+  email: string;
+  subscriptionId: string;
+  stripeCustomerId: string;
+  expiresAt: string;
+  dryRun: boolean;
+}
+
+// TMT: one device-bound key per seat. Create missing seats, refresh expiry on
+// existing ones, suspend surplus on a downgrade.
+async function reconcilePerSeat(
+  existing: SubscriptionLicense[],
+  quantity: number,
+  ctx: ReconcileCtx,
+): Promise<void> {
+  const bySeat = new Map<number, SubscriptionLicense>(existing.map((l) => [l.seatIndex, l]));
   const activeKeys: string[] = [];
   let createdAny = false;
   for (let seatIndex = 0; seatIndex < quantity; seatIndex++) {
@@ -119,21 +155,21 @@ async function reconcile(
     if (!seat) {
       const created = await createPaidLicense(
         {
-          product,
-          company,
-          email,
-          subscriptionId,
-          stripeCustomerId: sub.customer ? String(sub.customer) : "",
+          product: ctx.product,
+          company: ctx.company,
+          email: ctx.email,
+          subscriptionId: ctx.subscriptionId,
+          stripeCustomerId: ctx.stripeCustomerId,
           seatIndex,
-          expiresAt,
+          expiresAt: ctx.expiresAt,
         },
-        dryRun,
+        ctx.dryRun,
       );
       activeKeys.push(created.key);
       createdAny = true;
     } else {
-      if (seat.status === "SUSPENDED") await reinstateLicense(seat.id, dryRun);
-      await updateLicenseExpiry(seat.id, expiresAt, dryRun);
+      if (seat.status === "SUSPENDED") await reinstateLicense(seat.id, ctx.dryRun);
+      await updateLicenseExpiry(seat.id, ctx.expiresAt, ctx.dryRun);
       activeKeys.push(seat.key);
     }
   }
@@ -141,20 +177,64 @@ async function reconcile(
   // Suspend surplus seats on a downgrade.
   for (const l of existing) {
     if (l.seatIndex >= quantity && l.status !== "SUSPENDED") {
-      await suspendLicense(l.id, dryRun);
+      await suspendLicense(l.id, ctx.dryRun);
     }
   }
 
   // Email the keys when new seats were provisioned (initial or upgrade).
-  if (createdAny && email) {
+  if (createdAny && ctx.email) {
     await sendSubscriptionKeys(
-      { toEmail: email, company, productName: productLabel(product), keys: activeKeys, expiresAt },
-      dryRun,
+      { toEmail: ctx.email, company: ctx.company, productName: productLabel(ctx.product), keys: activeKeys, expiresAt: ctx.expiresAt },
+      ctx.dryRun,
     );
   }
-  console.log(
-    `${LOG_PREFIX} reconciled ${subscriptionId}: ${quantity} seat(s), ${activeKeys.length} active`,
-  );
+}
+
+// FW: exactly ONE floating key with maxMachines = quantity (#41). First reconcile
+// creates it; later ones update maxMachines + expiry in place. Never adds per-seat
+// keys; defensively suspends any stray extra licenses for this subscription.
+async function reconcileFloating(
+  existing: SubscriptionLicense[],
+  quantity: number,
+  ctx: ReconcileCtx,
+): Promise<void> {
+  const primary = existing.find((l) => l.seatIndex === 0) ?? existing[0];
+  let key: string;
+  let created = false;
+  if (!primary) {
+    const c = await createPaidLicense(
+      {
+        product: ctx.product,
+        company: ctx.company,
+        email: ctx.email,
+        subscriptionId: ctx.subscriptionId,
+        stripeCustomerId: ctx.stripeCustomerId,
+        seatIndex: 0,
+        expiresAt: ctx.expiresAt,
+        maxMachines: quantity,
+      },
+      ctx.dryRun,
+    );
+    key = c.key;
+    created = true;
+  } else {
+    if (primary.status === "SUSPENDED") await reinstateLicense(primary.id, ctx.dryRun);
+    await updateLicenseExpiry(primary.id, ctx.expiresAt, ctx.dryRun);
+    await updateLicenseMaxMachines(primary.id, quantity, ctx.dryRun);
+    key = primary.key;
+  }
+
+  // FW is single-key — suspend any stray extra licenses (self-heal).
+  for (const l of existing) {
+    if (l !== primary && l.status !== "SUSPENDED") await suspendLicense(l.id, ctx.dryRun);
+  }
+
+  if (created && ctx.email) {
+    await sendSubscriptionKeys(
+      { toEmail: ctx.email, company: ctx.company, productName: productLabel(ctx.product), keys: [key], expiresAt: ctx.expiresAt },
+      ctx.dryRun,
+    );
+  }
 }
 
 async function suspendAll(subscriptionId: string, dryRun: boolean): Promise<void> {
