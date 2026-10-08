@@ -40,8 +40,11 @@ export default function SignupForm({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [fwSeats, setFwSeats] = useState(1);
   const [tmtSeats, setTmtSeats] = useState(1);
+  const [seats, setSeats] = useState(1);
 
   const isProfessional = plan === "professional";
+  // Single-product seat selector on the open self-serve form (no token/prefill).
+  const showSeatSelector = !isProfessional && !prefill && !token;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,6 +66,8 @@ export default function SignupForm({
           // Used only on the open (token-less) path; the server takes the
           // product from the token when one is present.
           product,
+          // Seat/machine count — only sent on the open self-serve form.
+          ...(showSeatSelector ? { seats } : {}),
         };
 
     try {
@@ -184,6 +189,19 @@ export default function SignupForm({
                   hint={copy.professional.seatsTmtHint}
                   value={tmtSeats}
                   onChange={setTmtSeats}
+                />
+              </div>
+            </fieldset>
+          )}
+
+          {showSeatSelector && (
+            <fieldset className="rounded-md border border-slate-200 p-4 dark:border-slate-700">
+              <div className="space-y-4">
+                <SeatField
+                  label={product === "TMT" ? copy.seats.tmtLabel : copy.seats.frameworkLabel}
+                  hint={product === "TMT" ? copy.seats.tmtHint : copy.seats.frameworkHint}
+                  value={seats}
+                  onChange={setSeats}
                 />
               </div>
             </fieldset>

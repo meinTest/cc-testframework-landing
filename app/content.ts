@@ -87,6 +87,14 @@ export interface SignupCopy {
   questionsReach: string;
   successFramework: string;
   successTmgmt: string;
+  // Single-product seat/machine selector (FW = parallel runs/machines,
+  // TMT = users/seats). Shown on the open self-serve form (#56).
+  seats: {
+    frameworkLabel: string;
+    frameworkHint: string;
+    tmtLabel: string;
+    tmtHint: string;
+  };
   // Professional (BOTH) plan mode: seat selection + bundle wording.
   professional: {
     heading: string;
@@ -294,6 +302,12 @@ export const content: Record<Lang, Copy> = {
         "Trial aktiviert. Prüfe deine E-Mails für deinen Lizenzschlüssel und die Einrichtungshinweise.",
       successTmgmt:
         "Trial aktiviert. Prüfe deine E-Mails für deine Download-Links und deinen Zugangscode.",
+      seats: {
+        frameworkLabel: "Parallele Test-Runs",
+        frameworkHint: "Ein Lizenzschlüssel für so viele gleichzeitige Runs (Maschinen)",
+        tmtLabel: "Nutzer (Seats)",
+        tmtHint: "Ein Zugangscode je Seat",
+      },
       professional: {
         heading: "Professional-Trial starten",
         subtitle:
@@ -476,6 +490,12 @@ export const content: Record<Lang, Copy> = {
         "Trial activated. Check your email for your license key and setup instructions.",
       successTmgmt:
         "Trial activated. Check your email for your download links and access code.",
+      seats: {
+        frameworkLabel: "Parallel test runs",
+        frameworkHint: "One license key for this many concurrent runs (machines)",
+        tmtLabel: "Users (seats)",
+        tmtHint: "One access code per seat",
+      },
       professional: {
         heading: "Start your Professional trial",
         subtitle:
