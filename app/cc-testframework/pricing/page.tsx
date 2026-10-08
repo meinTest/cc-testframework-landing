@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import PricingSection from "../../PricingSection";
+import BundleCrossSell from "../../BundleCrossSell";
 import { content, resolveLang, withLang } from "../../content";
 import { isOffered, isVetted, PRODUCT_LABELS } from "../../products";
 import { getDisplayPrices } from "../../lib/stripe-pricing";
@@ -31,6 +32,9 @@ export default async function FrameworkPricingPage({
   );
   const prices = await getDisplayPrices(PRODUCT);
 
+  // Professional cross-sell: only when the other product (TMT) is also self-serve.
+  const showBundle = isOffered("TMT") && !isVetted(PRODUCT) && !isVetted("TMT");
+
   return (
     <main className="flex-1 px-6 py-16 sm:py-24">
       <div className="max-w-5xl mx-auto">
@@ -54,6 +58,13 @@ export default async function FrameworkPricingPage({
           subscriptionBaseHref={`/api/checkout?product=${PRODUCT}`}
           onetimeHref={`/demo-request?product=${PRODUCT}&plan=onetime`}
         />
+
+        {showBundle && (
+          <BundleCrossSell
+            copy={t.pricing.bundle}
+            href={withLang("/signup?plan=professional", lang)}
+          />
+        )}
       </div>
     </main>
   );

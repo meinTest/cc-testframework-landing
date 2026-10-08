@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import type { ProductId } from "../products";
+import type { PlanId } from "../plans";
 import type { SignupCopy } from "../content";
 
 type FormState = "idle" | "submitting" | "ok" | "error";
+
+const MAX_SEATS = 99;
 
 interface Prefill {
   name: string;
@@ -20,6 +23,9 @@ interface SignupFormProps {
   // time (carried in the pending-license metadata). Shown read-only instead of
   // re-collected.
   prefill?: Prefill;
+  // Plan mode (open self-serve only): "professional" renders the bundle form with
+  // per-product seat selection and posts `plan` + `fwSeats`/`tmtSeats` (#50).
+  plan?: PlanId;
 }
 
 export default function SignupForm({
@@ -27,10 +33,15 @@ export default function SignupForm({
   product,
   copy,
   prefill,
+  plan,
 }: SignupFormProps) {
   const [state, setState] = useState<FormState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [fwSeats, setFwSeats] = useState(1);
+  const [tmtSeats, setTmtSeats] = useState(1);
+
+  const isProfessional = plan === "professional";
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,15 +50,20 @@ export default function SignupForm({
     setSuccessMessage(null);
 
     const formData = new FormData(event.currentTarget);
-    const payload = {
+    const common = {
       name: prefill ? prefill.name : formData.get("name"),
       email: prefill ? prefill.email : formData.get("email"),
       company: prefill ? prefill.company : formData.get("company"),
-      token: formData.get("token") || undefined,
-      // Used only on the open (token-less) path; the server takes the product
-      // from the token when one is present.
-      product,
     };
+    const payload = isProfessional
+      ? { ...common, plan, fwSeats, tmtSeats }
+      : {
+          ...common,
+          token: formData.get("token") || undefined,
+          // Used only on the open (token-less) path; the server takes the
+          // product from the token when one is present.
+          product,
+        };
 
     try {
       const response = await fetch("/api/signup", {
@@ -63,7 +79,11 @@ export default function SignupForm({
         return;
       }
       setSuccessMessage(
-        product === "TMT" ? copy.successTmgmt : copy.successFramework,
+        isProfessional
+          ? copy.professional.success
+          : product === "TMT"
+            ? copy.successTmgmt
+            : copy.successFramework,
       );
       setState("ok");
     } catch (err) {
@@ -103,14 +123,26 @@ export default function SignupForm({
   // is license-based, so there is no GitHub username to capture).
   const oneClick = Boolean(prefill);
 
+  const heading = isProfessional
+    ? copy.professional.heading
+    : oneClick
+      ? copy.activateHeading
+      : copy.startHeading;
+  const subtitle = isProfessional ? copy.professional.subtitle : copy.subtitle;
+  const submitLabel = isProfessional
+    ? copy.professional.cta
+    : prefill
+      ? copy.activateTrial
+      : copy.requestTrial;
+
   return (
     <main className="flex-1 flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-md">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-          {oneClick ? copy.activateHeading : copy.startHeading}
+          {heading}
         </h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          {copy.subtitle}
+          {subtitle}
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
@@ -135,6 +167,28 @@ export default function SignupForm({
             </>
           )}
 
+          {isProfessional && (
+            <fieldset className="rounded-md border border-slate-200 p-4 dark:border-slate-700">
+              <legend className="px-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+                {copy.professional.seatsTitle}
+              </legend>
+              <div className="mt-2 space-y-4">
+                <SeatField
+                  label={copy.professional.seatsFramework}
+                  hint={copy.professional.seatsFrameworkHint}
+                  value={fwSeats}
+                  onChange={setFwSeats}
+                />
+                <SeatField
+                  label={copy.professional.seatsTmt}
+                  hint={copy.professional.seatsTmtHint}
+                  value={tmtSeats}
+                  onChange={setTmtSeats}
+                />
+              </div>
+            </fieldset>
+          )}
+
           {token && <input type="hidden" name="token" value={token} />}
 
           <button
@@ -142,11 +196,7 @@ export default function SignupForm({
             disabled={state === "submitting"}
             className="w-full rounded-md bg-brand px-4 py-2.5 text-base font-semibold text-white hover:bg-brand-strong disabled:opacity-50"
           >
-            {state === "submitting"
-              ? copy.submitting
-              : prefill
-                ? copy.activateTrial
-                : copy.requestTrial}
+            {state === "submitting" ? copy.submitting : submitLabel}
           </button>
 
           {state === "error" && errorMessage && (
@@ -175,6 +225,53 @@ function Summary({ prefill, label }: { prefill: Prefill; label: string }) {
       </p>
       <p className="text-slate-600 dark:text-slate-300">{prefill.email}</p>
       <p className="text-slate-600 dark:text-slate-300">{prefill.company}</p>
+    </div>
+  );
+}
+
+interface SeatFieldProps {
+  label: string;
+  hint: string;
+  value: number;
+  onChange: (value: number) => void;
+}
+
+function SeatField({ label, hint, value, onChange }: SeatFieldProps) {
+  const clamp = (n: number) => Math.min(MAX_SEATS, Math.max(1, n));
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+          {label}
+        </p>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{hint}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          aria-label="−"
+          onClick={() => onChange(clamp(value - 1))}
+          className="h-9 w-9 rounded-md border border-slate-300 text-lg text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          −
+        </button>
+        <input
+          type="number"
+          min={1}
+          max={MAX_SEATS}
+          value={value}
+          onChange={(e) => onChange(clamp(Math.floor(Number(e.target.value) || 1)))}
+          className="h-9 w-14 rounded-md border border-slate-300 bg-white text-center text-base text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+        />
+        <button
+          type="button"
+          aria-label="+"
+          onClick={() => onChange(clamp(value + 1))}
+          className="h-9 w-9 rounded-md border border-slate-300 text-lg text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          +
+        </button>
+      </div>
     </div>
   );
 }

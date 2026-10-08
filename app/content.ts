@@ -62,6 +62,12 @@ export interface PricingCopy {
     features: string[];
     cta: string;
   };
+  // Cross-sell footer on each product's pricing page → the Professional bundle.
+  bundle: {
+    title: string;
+    body: string;
+    cta: string;
+  };
 }
 
 export interface SignupCopy {
@@ -81,6 +87,18 @@ export interface SignupCopy {
   questionsReach: string;
   successFramework: string;
   successTmgmt: string;
+  // Professional (BOTH) plan mode: seat selection + bundle wording.
+  professional: {
+    heading: string;
+    subtitle: string;
+    seatsTitle: string;
+    seatsFramework: string;
+    seatsFrameworkHint: string;
+    seatsTmt: string;
+    seatsTmtHint: string;
+    cta: string;
+    success: string;
+  };
   errorGeneric: string;
   // page states (disclaimer + token errors)
   disabledTitle: string;
@@ -136,6 +154,7 @@ type Copy = {
     subtitle: string;
     framework: ProductCard;
     mgmt: ProductCard;
+    professional: ProductCard;
   };
   framework: ProductDetail;
   mgmt: ProductDetail;
@@ -176,6 +195,12 @@ export const content: Record<Lang, Copy> = {
         tagline: "Test-Specs verwalten — ganz ohne Git-Handgriffe",
         blurb:
           "Lokale Windows-App, in der Fachtester TypeScript-Test-Specs bearbeiten. Git-Operationen laufen unsichtbar im Hintergrund. Nutzt CC-Testframework als Ausführungs-Engine.",
+      },
+      professional: {
+        name: "Professional",
+        tagline: "Beide Produkte in einem Trial",
+        blurb:
+          "CC-Testframework und Verify Test Management zusammen — Seats pro Produkt frei wählbar (parallele Runs fürs Framework, Nutzer für Verify). Ein Trial, ein Abo, eine Willkommens-Mail.",
       },
     },
     framework: {
@@ -244,6 +269,11 @@ export const content: Record<Lang, Copy> = {
         ],
         cta: "Angebot anfragen",
       },
+      bundle: {
+        title: "Beide Produkte brauchen?",
+        body: "Professional bündelt CC-Testframework und Verify Test Management in einem Trial — Seats pro Produkt frei wählbar.",
+        cta: "Professional-Trial starten",
+      },
     },
     signup: {
       startHeading: "Trial starten",
@@ -264,6 +294,19 @@ export const content: Record<Lang, Copy> = {
         "Trial aktiviert. Prüfe deine E-Mails für deinen Lizenzschlüssel und die Einrichtungshinweise.",
       successTmgmt:
         "Trial aktiviert. Prüfe deine E-Mails für deine Download-Links und deinen Zugangscode.",
+      professional: {
+        heading: "Professional-Trial starten",
+        subtitle:
+          "CC-Testframework + Verify Test Management. 14 Tage, voller Funktionsumfang, keine Zahlungsdaten nötig.",
+        seatsTitle: "Seats pro Produkt",
+        seatsFramework: "CC-Testframework",
+        seatsFrameworkHint: "Parallele Test-Runs (ein Lizenzschlüssel)",
+        seatsTmt: "Verify Test Management",
+        seatsTmtHint: "Nutzer (ein Zugangscode je Seat)",
+        cta: "Professional-Trial starten",
+        success:
+          "Trial aktiviert. Prüfe deine E-Mails — eine Nachricht mit deinem Framework-Schlüssel und allen Verify-Zugangscodes.",
+      },
       errorGeneric:
         "Etwas ist schiefgelaufen. Bitte versuche es erneut oder kontaktiere support@itsbusiness.ch.",
       disabledTitle: "Dienst vorübergehend nicht verfügbar",
@@ -336,6 +379,12 @@ export const content: Record<Lang, Copy> = {
         blurb:
           "A local Windows app where functional testers edit TypeScript test specs. Git operations run invisibly in the background. Uses CC-Testframework as its execution engine.",
       },
+      professional: {
+        name: "Professional",
+        tagline: "Both products in one trial",
+        blurb:
+          "CC-Testframework and Verify Test Management together — seats are chosen per product (parallel runs for the framework, users for Verify). One trial, one subscription, one welcome email.",
+      },
     },
     framework: {
       name: "CC-Testframework",
@@ -403,6 +452,11 @@ export const content: Record<Lang, Copy> = {
         ],
         cta: "Request a quote",
       },
+      bundle: {
+        title: "Need both products?",
+        body: "Professional bundles CC-Testframework and Verify Test Management in one trial — seats chosen per product.",
+        cta: "Start Professional trial",
+      },
     },
     signup: {
       startHeading: "Start your trial",
@@ -422,6 +476,19 @@ export const content: Record<Lang, Copy> = {
         "Trial activated. Check your email for your license key and setup instructions.",
       successTmgmt:
         "Trial activated. Check your email for your download links and access code.",
+      professional: {
+        heading: "Start your Professional trial",
+        subtitle:
+          "CC-Testframework + Verify Test Management. 14 days, full feature set, no payment information required.",
+        seatsTitle: "Seats per product",
+        seatsFramework: "CC-Testframework",
+        seatsFrameworkHint: "Parallel test runs (one license key)",
+        seatsTmt: "Verify Test Management",
+        seatsTmtHint: "Users (one access code per seat)",
+        cta: "Start Professional trial",
+        success:
+          "Trial activated. Check your email — one message with your framework key and all Verify access codes.",
+      },
       errorGeneric:
         "Something went wrong. Please try again or contact support@itsbusiness.ch.",
       disabledTitle: "Service temporarily unavailable",

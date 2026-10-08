@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import SignupForm from "./SignupForm";
 import { findPendingLicenseByToken } from "../api/signup/lib/keygen";
 import { resolveProduct, isOffered, isVetted } from "../products";
+import { isPlanId, planProducts } from "../plans";
 import {
   content,
   resolveLang,
@@ -13,11 +14,12 @@ import {
 export const dynamic = "force-dynamic";
 
 interface SignupPageProps {
-  searchParams: Promise<{ token?: string; product?: string; lang?: string }>;
+  searchParams: Promise<{ token?: string; product?: string; plan?: string; lang?: string }>;
 }
 
 export default async function SignupPage({ searchParams }: SignupPageProps) {
-  const { token, product: productParam, lang: langParam } = await searchParams;
+  const { token, product: productParam, plan: planParam, lang: langParam } =
+    await searchParams;
   const lang = resolveLang(langParam);
   const c = content[lang].signup;
 
@@ -26,9 +28,24 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     return <Disclaimer c={c} />;
   }
 
-  // No token → open self-serve path. Allowed only for a product whose vetting is
-  // OFF; the chosen product comes from ?product= (defaults to framework).
+  // No token → open self-serve path.
   if (!token) {
+    // Plan mode (BOTH): ?plan=professional renders the bundle form. Self-serve
+    // only when every product in the plan is offered and none is sales-vetted;
+    // otherwise the bundle is sales-handled (point at /demo-request). (#50)
+    if (planParam && isPlanId(planParam)) {
+      const products = planProducts(planParam);
+      if (!products.every((p) => isOffered(p))) notFound();
+      if (products.some((p) => isVetted(p))) {
+        return (
+          <TokenError c={c} lang={lang} title={c.linkRequiredTitle} body={c.linkRequiredBody} />
+        );
+      }
+      return <SignupForm token={null} product={products[0]} plan={planParam} copy={c} />;
+    }
+
+    // Single product — allowed only for a product whose vetting is OFF; the
+    // chosen product comes from ?product= (defaults to framework).
     const product = resolveProduct(productParam);
     if (!isOffered(product)) notFound();
     if (isVetted(product)) {
