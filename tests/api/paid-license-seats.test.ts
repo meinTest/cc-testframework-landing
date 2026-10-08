@@ -1,7 +1,11 @@
 import { test, describe, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { createPaidLicense, updateLicenseMaxMachines } from "../../app/api/signup/lib/keygen";
+import {
+  createPaidLicense,
+  updateLicenseMaxMachines,
+  listSubscriptionLicenses,
+} from "../../app/api/signup/lib/keygen";
 
 // #41 — FW floating provisioning: ONE key with maxMachines = seats. These verify
 // the Keygen request bodies (fetch is stubbed; no network). TMT is unchanged:
@@ -68,5 +72,33 @@ describe("updateLicenseMaxMachines (#41)", () => {
   test("DRY_RUN makes no request", async () => {
     await updateLicenseMaxMachines("lic_1", 8, true);
     assert.equal(calls.length, 0);
+  });
+});
+
+describe("listSubscriptionLicenses — product per license (#42 grouping)", () => {
+  test("parses canonical product from metadata; filters by subscriptionId", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [
+            { id: "l_fw", attributes: { key: "FW-K", status: "ACTIVE", metadata: { subscriptionId: "sub_1", product: "FW", seatIndex: 0 } } },
+            { id: "l_t0", attributes: { key: "T-0", status: "ACTIVE", metadata: { subscriptionId: "sub_1", product: "cc-tmgmt", seatIndex: 0 } } },
+            { id: "l_t1", attributes: { key: "T-1", status: "ACTIVE", metadata: { subscriptionId: "sub_1", product: "TMT", seatIndex: 1 } } },
+            { id: "l_other", attributes: { key: "X", status: "ACTIVE", metadata: { subscriptionId: "sub_OTHER", product: "FW" } } },
+          ],
+        }),
+        text: async () => "",
+      }) as any) as typeof fetch;
+
+    const out = await listSubscriptionLicenses("sub_1", false);
+    assert.equal(out.length, 3); // sub_OTHER excluded
+    assert.equal(out.find((l) => l.id === "l_fw")!.product, "FW");
+    assert.equal(out.find((l) => l.id === "l_t0")!.product, "TMT"); // legacy cc-tmgmt coerced
+    assert.equal(out.find((l) => l.id === "l_t1")!.product, "TMT");
+    // Grouping by product (what reconcile does) splits them cleanly.
+    assert.equal(out.filter((l) => l.product === "FW").length, 1);
+    assert.equal(out.filter((l) => l.product === "TMT").length, 2);
   });
 });

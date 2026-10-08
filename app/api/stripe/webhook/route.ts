@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { resolveProduct, productLabel } from "../../../products";
+import { resolveProduct, coerceProduct, productLabel } from "../../../products";
 import {
   createPaidLicense,
   listSubscriptionLicenses,
@@ -87,17 +87,15 @@ async function reconcile(
   subscriptionId: string,
   dryRun: boolean,
 ): Promise<void> {
-  const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  // Expand the price's product so each line item's app_product (FW/TMT) resolves
+  // — a Professional subscription carries TWO line items, one per product (#42).
+  const sub = await stripe.subscriptions.retrieve(subscriptionId, {
+    expand: ["items.data.price.product"],
+  });
   if (DEAD_SUB_STATUSES.has(sub.status)) {
     await suspendAll(subscriptionId, dryRun);
     return;
   }
-  const item = sub.items.data[0];
-  const quantity = Math.max(1, item?.quantity ?? 1);
-  const product = resolveProduct(sub.metadata?.app_product);
-  // current_period_end lives on the subscription item in recent Stripe API versions.
-  const periodEnd = item?.current_period_end ?? Math.floor(Date.now() / 1000);
-  const expiresAt = new Date(periodEnd * 1000).toISOString();
 
   let email = "";
   let company = "";
@@ -110,24 +108,72 @@ async function reconcile(
         (typeof customer.metadata?.company === "string" ? customer.metadata.company : "");
     }
   }
-
+  const stripeCustomerId = sub.customer ? String(sub.customer) : "";
   const existing = await listSubscriptionLicenses(subscriptionId, dryRun);
-  const ctx: ReconcileCtx = {
-    product,
-    company,
-    email,
-    subscriptionId,
-    stripeCustomerId: sub.customer ? String(sub.customer) : "",
-    expiresAt,
-    dryRun,
-  };
 
-  if (product === "FW") {
-    await reconcileFloating(existing, quantity, ctx);
-  } else {
-    await reconcilePerSeat(existing, quantity, ctx);
+  // One entry per line item: product + purchased quantity + expiry.
+  const periodFallback = Math.floor(Date.now() / 1000);
+  const lineItems = sub.items.data.map((item) => {
+    const prod = item.price?.product;
+    const appProduct =
+      prod && typeof prod === "object" && !("deleted" in prod)
+        ? coerceProduct(prod.metadata?.app_product)
+        : null;
+    // Fallback to the subscription-level metadata (single-product subs).
+    const product = appProduct ?? resolveProduct(sub.metadata?.app_product);
+    const periodEnd = item.current_period_end ?? periodFallback;
+    return {
+      product,
+      quantity: Math.max(1, item.quantity ?? 1),
+      expiresAt: new Date(periodEnd * 1000).toISOString(),
+    };
+  });
+  const subscribedProducts = new Set(lineItems.map((li) => li.product));
+
+  // Reconcile each product against the licenses that belong to it. FW = one
+  // floating key (maxMachines = quantity); TMT = one device-bound key per seat.
+  const groups: GroupResult[] = [];
+  for (const li of lineItems) {
+    const forProduct = existing.filter((l) => l.product === li.product);
+    const ctx: ReconcileCtx = {
+      product: li.product,
+      company,
+      email,
+      subscriptionId,
+      stripeCustomerId,
+      expiresAt: li.expiresAt,
+      dryRun,
+    };
+    groups.push(
+      li.product === "FW"
+        ? await reconcileFloating(forProduct, li.quantity, ctx)
+        : await reconcilePerSeat(forProduct, li.quantity, ctx),
+    );
   }
-  console.log(`${LOG_PREFIX} reconciled ${subscriptionId}: ${product}, ${quantity} seat(s)`);
+
+  // A product dropped from the subscription → suspend its (now orphaned) licenses.
+  for (const l of existing) {
+    if (l.product && !subscribedProducts.has(l.product) && l.status !== "SUSPENDED") {
+      await suspendLicense(l.id, dryRun);
+    }
+  }
+
+  // ONE combined mail covering every product that got new keys (#42).
+  const fresh = groups.filter((g) => g.created && g.keys.length > 0);
+  if (fresh.length > 0 && email) {
+    await sendSubscriptionKeys(
+      {
+        toEmail: email,
+        company,
+        groups: fresh.map((g) => ({ productName: g.productName, keys: g.keys })),
+        expiresAt: lineItems[0]?.expiresAt ?? new Date().toISOString(),
+      },
+      dryRun,
+    );
+  }
+  console.log(
+    `${LOG_PREFIX} reconciled ${subscriptionId}: ${lineItems.map((li) => `${li.product}×${li.quantity}`).join(" + ")}`,
+  );
 }
 
 interface ReconcileCtx {
@@ -140,13 +186,20 @@ interface ReconcileCtx {
   dryRun: boolean;
 }
 
+// What a per-product reconcile produced, for the combined keys mail.
+interface GroupResult {
+  productName: string;
+  keys: string[];
+  created: boolean; // at least one NEW key was provisioned
+}
+
 // TMT: one device-bound key per seat. Create missing seats, refresh expiry on
 // existing ones, suspend surplus on a downgrade.
 async function reconcilePerSeat(
   existing: SubscriptionLicense[],
   quantity: number,
   ctx: ReconcileCtx,
-): Promise<void> {
+): Promise<GroupResult> {
   const bySeat = new Map<number, SubscriptionLicense>(existing.map((l) => [l.seatIndex, l]));
   const activeKeys: string[] = [];
   let createdAny = false;
@@ -181,23 +234,17 @@ async function reconcilePerSeat(
     }
   }
 
-  // Email the keys when new seats were provisioned (initial or upgrade).
-  if (createdAny && ctx.email) {
-    await sendSubscriptionKeys(
-      { toEmail: ctx.email, company: ctx.company, productName: productLabel(ctx.product), keys: activeKeys, expiresAt: ctx.expiresAt },
-      ctx.dryRun,
-    );
-  }
+  return { productName: productLabel(ctx.product), keys: activeKeys, created: createdAny };
 }
 
 // FW: exactly ONE floating key with maxMachines = quantity (#41). First reconcile
 // creates it; later ones update maxMachines + expiry in place. Never adds per-seat
-// keys; defensively suspends any stray extra licenses for this subscription.
+// keys; defensively suspends any stray extra licenses for this product.
 async function reconcileFloating(
   existing: SubscriptionLicense[],
   quantity: number,
   ctx: ReconcileCtx,
-): Promise<void> {
+): Promise<GroupResult> {
   const primary = existing.find((l) => l.seatIndex === 0) ?? existing[0];
   let key: string;
   let created = false;
@@ -224,17 +271,12 @@ async function reconcileFloating(
     key = primary.key;
   }
 
-  // FW is single-key — suspend any stray extra licenses (self-heal).
+  // FW is single-key for this product — suspend any stray extras (self-heal).
   for (const l of existing) {
     if (l !== primary && l.status !== "SUSPENDED") await suspendLicense(l.id, ctx.dryRun);
   }
 
-  if (created && ctx.email) {
-    await sendSubscriptionKeys(
-      { toEmail: ctx.email, company: ctx.company, productName: productLabel(ctx.product), keys: [key], expiresAt: ctx.expiresAt },
-      ctx.dryRun,
-    );
-  }
+  return { productName: productLabel(ctx.product), keys: [key], created };
 }
 
 async function suspendAll(subscriptionId: string, dryRun: boolean): Promise<void> {

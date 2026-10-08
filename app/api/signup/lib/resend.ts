@@ -482,11 +482,168 @@ export async function sendTmgmtWelcome(
   );
 }
 
+interface ProfessionalWelcomeInput {
+  toEmail: string;
+  customerName: string;
+  company: string;
+  fwKey: string;
+  tmtKeys: string[];
+  licenseExpiry: string | null;
+  origin: string;
+  quickstartUrlEn: string;
+  quickstartUrlDe: string;
+  portalUrl?: string;
+}
+
+/**
+ * Combined welcome mail for the Professional bundle (#42): ONE mail with a clearly
+ * separated Framework section (CC_LICENSE_KEY + npm registry + quickstart) and a
+ * Verify Test Management section (download + per-user access codes). Attaches the
+ * FW license PDF plus one TMT license PDF per seat.
+ */
+export async function sendProfessionalWelcome(
+  input: ProfessionalWelcomeInput,
+  dryRun: boolean,
+): Promise<void> {
+  const from = required("RESEND_FROM");
+
+  const fwPdf = await buildLicensePdf({
+    productName: productLabel("FW"),
+    licensee: input.customerName,
+    company: input.company,
+    licenseKey: input.fwKey,
+    expiresAt: input.licenseExpiry,
+  });
+  const tmtPdfs = await Promise.all(
+    input.tmtKeys.map((key) =>
+      buildLicensePdf({
+        productName: productLabel("TMT"),
+        licensee: input.customerName,
+        company: input.company,
+        licenseKey: key,
+        expiresAt: input.licenseExpiry,
+      }),
+    ),
+  );
+
+  if (dryRun) {
+    console.log(
+      `${LOG_PREFIX} DRY_RUN — would send Professional welcome to ${input.toEmail} (1 FW key + ${input.tmtKeys.length} TMT key(s), ${1 + tmtPdfs.length} PDFs)`,
+    );
+    return;
+  }
+
+  const apiKey = required("RESEND_API_KEY");
+  const resend = new Resend(apiKey);
+
+  const expiryLine = input.licenseExpiry
+    ? `Your trial is active until <strong>${new Date(input.licenseExpiry).toLocaleDateString("en-GB")}</strong>.`
+    : `Your trial is now active.`;
+
+  const origin = input.origin.replace(/\/$/, "");
+  const registryPath = "/api/tmgmt/npm/";
+  const registryUrl = `${origin}${registryPath}`;
+  const authRef = `${origin.replace(/^https?:/, "")}${registryPath}`;
+  const npmrc = `@meintest:registry=${registryUrl}\n${authRef}:_authToken=${input.fwKey}`;
+  const downloadUrl = (os: "win" | "mac" | "linux") =>
+    `${origin}/api/tmgmt/download?os=${os}&key=${encodeURIComponent(input.tmtKeys[0] ?? "")}`;
+
+  const tmtRows = input.tmtKeys
+    .map((k, i) => (input.tmtKeys.length === 1 ? k : `Seat ${i + 1}: ${k}`))
+    .join("\n");
+  const billing = billingBlock(input.portalUrl);
+
+  const html = `
+    <h1>Welcome to Professional</h1>
+    <p>Hi ${escape(input.customerName)},</p>
+    <p>your Professional trial is ready — it bundles <strong>CC-Testframework</strong>
+       and <strong>Verify Test Management</strong>. ${expiryLine}</p>
+
+    <h2>CC-Testframework (for your test runs / CI)</h2>
+    <p>One license key for the framework. Set it on the machine that runs the
+       tests; the same key also authenticates the package registry:</p>
+    <pre>CC_LICENSE_KEY=${escape(input.fwKey)}</pre>
+    <p>Point npm at the license-gated registry (project <code>.npmrc</code>):</p>
+    <pre>${escape(npmrc)}</pre>
+    <pre>npm install @meintest/cc-testframework</pre>
+    <p>Quickstart: <a href="${input.quickstartUrlEn}">English</a> &nbsp;|&nbsp;
+       <a href="${input.quickstartUrlDe}">Deutsch</a></p>
+
+    <h2>Verify Test Management (the desktop app, one key per user)</h2>
+    <p>Download the app:
+       <a href="${downloadUrl("win")}">Windows</a> &nbsp;|&nbsp;
+       <a href="${downloadUrl("mac")}">macOS</a> &nbsp;|&nbsp;
+       <a href="${downloadUrl("linux")}">Linux</a></p>
+    <p>Start the app and enter the access code for the respective user:</p>
+    <pre>${escape(tmtRows)}</pre>
+
+    <p style="color:#64748b;font-size:13px">Keep these keys safe — they are tied to
+       your license; if it expires or is revoked, installs, updates and the app
+       stop working.</p>
+    ${billing.html}
+    <hr>
+    <p>Questions? Reply to this email or reach us at
+       <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
+  `;
+
+  const text = [
+    `Welcome to Professional`,
+    ``,
+    `Hi ${input.customerName},`,
+    ``,
+    `your Professional trial is ready (CC-Testframework + Verify Test Management). ${expiryLine.replace(/<[^>]+>/g, "")}`,
+    ``,
+    `== CC-Testframework (test runs / CI) ==`,
+    `Configure your license (also authenticates the registry):`,
+    `   CC_LICENSE_KEY=${input.fwKey}`,
+    `.npmrc:`,
+    ...npmrc.split("\n").map((l) => `   ${l}`),
+    `   then: npm install @meintest/cc-testframework`,
+    `Quickstart EN: ${input.quickstartUrlEn}`,
+    `Quickstart DE: ${input.quickstartUrlDe}`,
+    ``,
+    `== Verify Test Management (desktop app, one key per user) ==`,
+    `Download: Windows ${downloadUrl("win")} | macOS ${downloadUrl("mac")} | Linux ${downloadUrl("linux")}`,
+    `Access code(s):`,
+    ...tmtRows.split("\n").map((l) => `   ${l}`),
+    ``,
+    `Keep these keys safe — tied to your license; if it expires or is revoked, installs/updates and the app stop.`,
+    ...billing.text,
+    ``,
+    `Questions? support@itsbusiness.ch`,
+  ].join("\n");
+
+  const attachments = [
+    { filename: "CC-Testframework-license.pdf", content: Buffer.from(fwPdf) },
+    ...tmtPdfs.map((pdf, i) => ({
+      filename:
+        tmtPdfs.length === 1
+          ? "Verify-Test-Management-license.pdf"
+          : `Verify-Test-Management-license-seat-${i + 1}.pdf`,
+      content: Buffer.from(pdf),
+    })),
+  ];
+
+  const result = await resend.emails.send({
+    from,
+    to: input.toEmail,
+    subject: "Your Professional trial is ready (CC-Testframework + Verify Test Management)",
+    html,
+    text,
+    attachments,
+  });
+  if (result.error) {
+    throw new Error(`Resend Professional welcome send failed: ${result.error.message}`);
+  }
+  console.log(`${LOG_PREFIX} Professional welcome sent to ${input.toEmail} (id=${result.data?.id})`);
+}
+
 interface SubscriptionKeysInput {
   toEmail: string;
   company: string;
-  productName: string;
-  keys: string[];
+  // One section per product. A single-product subscription has one group; a
+  // Professional subscription has two (FW + TMT) in ONE mail (#42).
+  groups: { productName: string; keys: string[] }[];
   expiresAt: string;
 }
 
@@ -495,10 +652,11 @@ export async function sendSubscriptionKeys(
   dryRun: boolean,
 ): Promise<void> {
   const from = required("RESEND_FROM");
+  const totalKeys = input.groups.reduce((n, g) => n + g.keys.length, 0);
 
   if (dryRun) {
     console.log(
-      `${LOG_PREFIX} DRY_RUN — would send ${input.keys.length} ${input.productName} key(s) to ${input.toEmail}`,
+      `${LOG_PREFIX} DRY_RUN — would send ${totalKeys} key(s) across ${input.groups.length} product(s) to ${input.toEmail}`,
     );
     return;
   }
@@ -506,44 +664,49 @@ export async function sendSubscriptionKeys(
   const apiKey = required("RESEND_API_KEY");
   const resend = new Resend(apiKey);
   const renewsOn = new Date(input.expiresAt).toLocaleDateString("en-GB");
-  const rows = input.keys
-    .map((k, i) => `Seat ${i + 1}: ${k}`)
-    .join("\n");
+  const multi = input.groups.length > 1;
+  const title = multi
+    ? "Your license keys"
+    : `Your ${input.groups[0]?.productName ?? "subscription"} license keys`;
 
+  const rowsFor = (keys: string[]) =>
+    keys.length === 1 ? keys[0] : keys.map((k, i) => `Seat ${i + 1}: ${k}`).join("\n");
+
+  const htmlSections = input.groups
+    .map(
+      (g) => `
+    <h2>${escape(g.productName)}</h2>
+    <pre>${escape(rowsFor(g.keys))}</pre>`,
+    )
+    .join("");
   const html = `
-    <h1>Your ${escape(input.productName)} license keys</h1>
-    <p>Thank you for your subscription. Here ${input.keys.length === 1 ? "is your license key" : "are your license keys"}
-       — one per seat. Hand out one key per user; each key is per named user.</p>
-    <pre>${escape(rows)}</pre>
+    <h1>${escape(title)}</h1>
+    <p>Thank you for your subscription. Your license key${totalKeys === 1 ? "" : "s"} per product:</p>
+    ${htmlSections}
     <p>Your subscription renews on <strong>${renewsOn}</strong>; the keys stay valid as long as the subscription is active.</p>
     <hr>
     <p>Questions? Reach us at
        <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
   `;
+  const textSections = input.groups
+    .flatMap((g) => [`${g.productName}:`, rowsFor(g.keys), ``]);
   const text = [
-    `Your ${input.productName} license keys`,
+    title,
     ``,
-    `Thank you for your subscription. One key per seat / user:`,
+    `Thank you for your subscription. Your license key(s) per product:`,
     ``,
-    rows,
-    ``,
+    ...textSections,
     `Renews on ${renewsOn}; keys stay valid while the subscription is active.`,
     ``,
     `Questions? support@itsbusiness.ch`,
   ].join("\n");
 
-  const result = await resend.emails.send({
-    from,
-    to: input.toEmail,
-    subject: `Your ${input.productName} license keys`,
-    html,
-    text,
-  });
+  const result = await resend.emails.send({ from, to: input.toEmail, subject: title, html, text });
   if (result.error) {
     throw new Error(`Resend subscription keys send failed: ${result.error.message}`);
   }
   console.log(
-    `${LOG_PREFIX} sent ${input.keys.length} key(s) to ${input.toEmail} (id=${result.data?.id})`,
+    `${LOG_PREFIX} sent ${totalKeys} key(s) across ${input.groups.length} product(s) to ${input.toEmail} (id=${result.data?.id})`,
   );
 }
 

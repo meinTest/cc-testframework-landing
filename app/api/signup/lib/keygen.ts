@@ -1,4 +1,4 @@
-import type { ProductId } from "../../../products";
+import { coerceProduct, type ProductId } from "../../../products";
 import type { BillingCycle, Currency } from "../../../pricing";
 import { DEFAULT_TRIAL_DAYS } from "./trial";
 
@@ -474,6 +474,9 @@ export interface SubscriptionLicense {
   key: string;
   seatIndex: number;
   status: string;
+  // Canonical product of this license (from metadata.product). Lets the webhook
+  // group a multi-product (Professional) subscription's licenses by product (#42).
+  product: ProductId | null;
 }
 
 export async function createPaidLicense(
@@ -489,6 +492,7 @@ export async function createPaidLicense(
       key: `DRY-SEAT${input.seatIndex}-XXXXX`,
       seatIndex: input.seatIndex,
       status: "ACTIVE",
+      product: input.product,
     };
   }
 
@@ -543,6 +547,7 @@ export async function createPaidLicense(
     key: license.attributes.key,
     seatIndex: input.seatIndex,
     status: license.attributes.status ?? "ACTIVE",
+    product: input.product,
   };
 }
 
@@ -584,6 +589,7 @@ export async function listSubscriptionLicenses(
         key: item.attributes.key,
         seatIndex: Number(md.seatIndex) || 0,
         status: item.attributes.status ?? "UNKNOWN",
+        product: coerceProduct(md.product),
       });
     }
     if (data.length < size) break;

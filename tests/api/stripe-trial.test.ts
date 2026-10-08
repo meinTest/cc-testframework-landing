@@ -58,7 +58,7 @@ describe("POST /api/public/v1/signup with STRIPE_TRIAL_ENABLED=true (DRY_RUN)", 
     assert.equal(((await res.json()) as { ok: boolean }).ok, true);
   });
 
-  test("professional plan → 200 (two subscriptions path)", async () => {
+  test("professional plan → 200 (one subscription, two line items, #42)", async () => {
     const res = await SIGNUP(req({ ...VALID, plan: "professional", cycle: "yearly" }));
     assert.equal(res.status, 200);
     assert.equal(((await res.json()) as { ok: boolean }).ok, true);

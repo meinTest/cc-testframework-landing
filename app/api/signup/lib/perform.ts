@@ -4,11 +4,11 @@ import {
   deleteLicense,
   findPendingLicenseByToken,
 } from "./keygen";
-import { sendWelcomeEmail, sendTmgmtWelcome, notifySupport } from "./resend";
+import { sendWelcomeEmail, sendTmgmtWelcome, sendProfessionalWelcome, notifySupport } from "./resend";
 import { sanitizeTrialDays, DEFAULT_TRIAL_DAYS } from "./trial";
 import {
   ensureCustomer,
-  createTrialSubscription,
+  createPlanTrialSubscription,
   cancelSubscription,
 } from "./stripe-subscription";
 import {
@@ -170,14 +170,21 @@ export async function performSignup(
   if (!provision.ok) return provision.outcome;
   const provisioned = provision.provisioned;
 
-  // Deliver each product's welcome mail (best-effort — the license is valid
-  // regardless; an email hiccup is logged, not surfaced). Subscription-backed
-  // trials get a billing-portal "add a card to keep going" link (#34).
-  for (const p of provisioned) {
-    const portalUrl = p.manageable
-      ? `${origin}/api/license/portal?key=${encodeURIComponent(p.key)}`
-      : undefined;
-    await sendWelcome(p.product, p.key, p.expiry, input, origin, portalUrl);
+  // Deliver the welcome mail(s) (best-effort — the license is valid regardless; an
+  // email hiccup is logged, not surfaced). Subscription-backed trials get a
+  // billing-portal "add a card to keep going" link (#34). A multi-product plan
+  // (Professional) gets ONE combined mail with both products' keys (#42); a
+  // single-product plan keeps its product-specific onboarding mail.
+  const distinctProducts = new Set(provisioned.map((p) => p.product));
+  if (distinctProducts.size > 1) {
+    await sendProfessionalWelcomeMail(provisioned, input, origin, dryRun);
+  } else {
+    for (const p of provisioned) {
+      const portalUrl = p.manageable
+        ? `${origin}/api/license/portal?key=${encodeURIComponent(p.key)}`
+        : undefined;
+      await sendWelcome(p.product, p.key, p.expiry, input, origin, portalUrl);
+    }
   }
 
   // Notify support per provisioned product (non-fatal).
@@ -272,9 +279,11 @@ async function provisionKeygenTrials(
   return { ok: true, provisioned: created };
 }
 
-// Variante A: one Stripe customer + a card-less trialing subscription per product,
-// each mirrored by a Keygen license (expiry = trial end). Atomic: a failure rolls
-// back created licenses AND cancels created subscriptions.
+// Variante A: one Stripe customer + ONE card-less trialing subscription for the
+// whole plan (a line item per product, #42), each product mirrored by Keygen
+// license(s) — FW = one floating key (maxMachines = seats, #41); TMT = one
+// device-bound key per seat. Atomic: a failure rolls back created licenses AND
+// cancels the subscription.
 async function provisionStripeTrials(
   products: ProductId[],
   input: SignupInput,
@@ -284,6 +293,10 @@ async function provisionStripeTrials(
   const days = trialDays ?? DEFAULT_TRIAL_DAYS;
   const cycle: BillingCycle = input.cycle ?? "monthly";
   const currency: Currency = input.currency ?? "CHF";
+
+  // Seats per product. One for now; #39 will source real per-product seat counts
+  // (FW concurrency vs TMT users are independent — see #42).
+  const seatsFor = (_product: ProductId): number => 1;
 
   let customerId: string;
   try {
@@ -297,7 +310,7 @@ async function provisionStripeTrials(
   }
 
   const created: ProvisionedTrial[] = [];
-  const subs: string[] = [];
+  let subscriptionId: string | null = null;
   const rollback = async () => {
     for (const c of created) {
       try {
@@ -306,51 +319,51 @@ async function provisionStripeTrials(
         console.error(`${LOG_PREFIX} rollback license ${c.licenseId} failed (non-fatal)`, rb);
       }
     }
-    for (const s of subs) await cancelSubscription(s, dryRun);
+    if (subscriptionId) await cancelSubscription(subscriptionId, dryRun);
   };
 
-  // Seats for the trial. One for now; #39 will source a per-product seat count
-  // from the signup (FW multi-seat trials). FW mirrors it onto the license as
-  // maxMachines (one floating key, #41); TMT stays single-seat (per-user key).
-  const seats = 1;
-
-  for (const product of products) {
-    try {
-      const sub = await createTrialSubscription(
-        { customerId, product, cycle, currency, trialDays: days, seats },
-        dryRun,
-      );
-      if (!sub) {
-        await rollback();
-        return {
-          ok: false,
-          outcome: err(502, "No plan is configured for this product yet. Please contact support@itsbusiness.ch."),
-        };
-      }
-      subs.push(sub.subscriptionId);
-      const license = await createPaidLicense(
-        {
-          product,
-          company: input.company,
-          email: input.email,
-          customerName: input.name,
-          subscriptionId: sub.subscriptionId,
-          stripeCustomerId: customerId,
-          seatIndex: 0,
-          expiresAt: sub.trialEndsAt,
-          ...(product === "FW" ? { maxMachines: seats } : {}),
-        },
-        dryRun,
-      );
-      created.push({ product, key: license.key, expiry: sub.trialEndsAt, licenseId: license.id, manageable: true });
-    } catch (e) {
-      console.error(`${LOG_PREFIX} stripe trial provision failed for ${product} — rolling back`, e);
-      await rollback();
+  try {
+    const items = products.map((product) => ({ product, seats: seatsFor(product) }));
+    const sub = await createPlanTrialSubscription(
+      { customerId, items, cycle, currency, trialDays: days },
+      dryRun,
+    );
+    if (!sub) {
       return {
         ok: false,
-        outcome: err(500, "Could not start your trial. Please contact support@itsbusiness.ch."),
+        outcome: err(502, "No plan is configured for this product yet. Please contact support@itsbusiness.ch."),
       };
     }
+    subscriptionId = sub.subscriptionId;
+
+    for (const { product, seats } of items) {
+      // FW → one floating key (maxMachines = seats). TMT → one key per seat.
+      const seatCount = product === "FW" ? 1 : seats;
+      for (let seatIndex = 0; seatIndex < seatCount; seatIndex++) {
+        const license = await createPaidLicense(
+          {
+            product,
+            company: input.company,
+            email: input.email,
+            customerName: input.name,
+            subscriptionId: sub.subscriptionId,
+            stripeCustomerId: customerId,
+            seatIndex,
+            expiresAt: sub.trialEndsAt,
+            ...(product === "FW" ? { maxMachines: seats } : {}),
+          },
+          dryRun,
+        );
+        created.push({ product, key: license.key, expiry: sub.trialEndsAt, licenseId: license.id, manageable: true });
+      }
+    }
+  } catch (e) {
+    console.error(`${LOG_PREFIX} stripe trial provision failed — rolling back`, e);
+    await rollback();
+    return {
+      ok: false,
+      outcome: err(500, "Could not start your trial. Please contact support@itsbusiness.ch."),
+    };
   }
   return { ok: true, provisioned: created };
 }
@@ -404,6 +417,43 @@ async function sendWelcome(
     }
   } catch (e) {
     console.error(`${LOG_PREFIX} welcome mail failed for ${product} — license is valid, customer needs manual outreach`, e);
+  }
+}
+
+// One combined welcome mail for a multi-product (Professional) plan (#42): the FW
+// key + all TMT keys in a single mail. Best-effort (licenses are valid regardless).
+async function sendProfessionalWelcomeMail(
+  provisioned: ProvisionedTrial[],
+  input: SignupInput,
+  origin: string,
+  dryRun: boolean,
+): Promise<void> {
+  const fw = provisioned.filter((p) => p.product === "FW");
+  const tmt = provisioned.filter((p) => p.product === "TMT");
+  const portalSource = provisioned.find((p) => p.manageable);
+  const portalUrl = portalSource
+    ? `${origin}/api/license/portal?key=${encodeURIComponent(portalSource.key)}`
+    : undefined;
+  try {
+    await sendProfessionalWelcome(
+      {
+        toEmail: input.email,
+        customerName: input.name,
+        company: input.company,
+        fwKey: fw[0]?.key ?? "",
+        tmtKeys: tmt.map((t) => t.key),
+        licenseExpiry: fw[0]?.expiry ?? tmt[0]?.expiry ?? null,
+        origin,
+        quickstartUrlEn:
+          process.env.QUICKSTART_URL_EN ?? "https://meintest.github.io/cc-testframework/en/quickstart",
+        quickstartUrlDe:
+          process.env.QUICKSTART_URL_DE ?? "https://meintest.github.io/cc-testframework/de/quickstart",
+        portalUrl,
+      },
+      dryRun,
+    );
+  } catch (e) {
+    console.error(`${LOG_PREFIX} Professional welcome mail failed — licenses are valid, manual outreach needed`, e);
   }
 }
 
