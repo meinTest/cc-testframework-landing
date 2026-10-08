@@ -46,6 +46,16 @@ export interface SignupInput {
   // so the later trial→paid upgrade can pre-select them. Optional.
   cycle?: BillingCycle;
   currency?: Currency;
+  // Per-product seat counts for the trial (#39). `default` applies to any product
+  // without an explicit override; `byProduct` holds explicit per-product counts
+  // (Professional: m FW + n TMT). FW = one floating key with maxMachines = seats;
+  // TMT = one device-bound key per seat.
+  seats: SeatCounts;
+}
+
+export interface SeatCounts {
+  default: number;
+  byProduct: Partial<Record<ProductId, number>>;
 }
 
 export interface SignupOutcome {
@@ -62,6 +72,55 @@ interface SignupPayload {
   plan?: unknown;
   cycle?: unknown;
   currency?: unknown;
+  // Seats: a scalar (applies to all products), an object { FW, TMT }, or the
+  // explicit per-product fields fwSeats/tmtSeats (which win over both).
+  seats?: unknown;
+  fwSeats?: unknown;
+  tmtSeats?: unknown;
+}
+
+// Seat count ceiling — matches the checkout route's adjustable_quantity maximum.
+const MAX_SEATS = 999;
+
+/**
+ * Lenient seat parse (mirrors the checkout route): absent → undefined, so the
+ * caller can fall back to a default; present but invalid / < 1 → 1; capped at
+ * MAX_SEATS. Never throws — an out-of-range value is clamped, not rejected.
+ */
+function clampSeats(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, MAX_SEATS);
+}
+
+/** Seats for a product: its explicit override, else the plan-wide default. */
+export function resolveSeatCount(seats: SeatCounts, product: ProductId): number {
+  return seats.byProduct[product] ?? seats.default;
+}
+
+export interface SeatPlanEntry {
+  product: ProductId;
+  seatIndex: number;
+  // FW only: the floating key's maxMachines override (= purchased seats). TMT
+  // seats are separate device-bound keys and carry no override.
+  maxMachines?: number;
+}
+
+/**
+ * Expand a plan's per-product seat counts into the concrete list of licenses to
+ * provision: FW → ONE floating key (maxMachines = seats, #41); TMT → one
+ * device-bound key per seat (seatIndex 0..n-1).
+ */
+export function expandSeatPlan(items: { product: ProductId; seats: number }[]): SeatPlanEntry[] {
+  const out: SeatPlanEntry[] = [];
+  for (const { product, seats } of items) {
+    const count = product === "FW" ? 1 : Math.max(1, seats);
+    for (let seatIndex = 0; seatIndex < count; seatIndex++) {
+      out.push({ product, seatIndex, ...(product === "FW" ? { maxMachines: Math.max(1, seats) } : {}) });
+    }
+  }
+  return out;
 }
 
 /**
@@ -103,7 +162,39 @@ export function validateSignupInput(
     ? (currencyRaw as Currency)
     : undefined;
 
-  return { value: { name, email, company, token, products, cycle, currency } };
+  const seats = parseSeats(payload);
+
+  return { value: { name, email, company, token, products, cycle, currency, seats } };
+}
+
+/**
+ * Resolve per-product seat counts from the payload (#39). Accepts a scalar
+ * `seats` (the plan-wide default), an object `seats: { FW, TMT }`, and the
+ * explicit `fwSeats` / `tmtSeats` fields — the latter win over the others. All
+ * lenient-clamped; a missing value leaves the default at 1.
+ */
+function parseSeats(payload: SignupPayload): SeatCounts {
+  let fallback = 1;
+  const byProduct: Partial<Record<ProductId, number>> = {};
+
+  const s = payload.seats;
+  if (s && typeof s === "object" && !Array.isArray(s)) {
+    const obj = s as Record<string, unknown>;
+    const fw = clampSeats(obj.FW ?? obj.fw);
+    const tmt = clampSeats(obj.TMT ?? obj.tmt);
+    if (fw !== undefined) byProduct.FW = fw;
+    if (tmt !== undefined) byProduct.TMT = tmt;
+  } else {
+    fallback = clampSeats(s) ?? 1;
+  }
+
+  // Explicit per-product fields always win.
+  const fwTop = clampSeats(payload.fwSeats);
+  const tmtTop = clampSeats(payload.tmtSeats);
+  if (fwTop !== undefined) byProduct.FW = fwTop;
+  if (tmtTop !== undefined) byProduct.TMT = tmtTop;
+
+  return { default: fallback, byProduct };
 }
 
 export async function performSignup(
@@ -179,12 +270,14 @@ export async function performSignup(
   if (distinctProducts.size > 1) {
     await sendProfessionalWelcomeMail(provisioned, input, origin, dryRun);
   } else {
-    for (const p of provisioned) {
-      const portalUrl = p.manageable
-        ? `${origin}/api/license/portal?key=${encodeURIComponent(p.key)}`
-        : undefined;
-      await sendWelcome(p.product, p.key, p.expiry, input, origin, portalUrl);
-    }
+    // Single product — ONE mail carrying ALL seat keys (TMT may be N keys, #39;
+    // FW is always one floating key). The portal link uses the first key.
+    const product = provisioned[0].product;
+    const keys = provisioned.map((p) => p.key);
+    const portalUrl = provisioned[0].manageable
+      ? `${origin}/api/license/portal?key=${encodeURIComponent(keys[0])}`
+      : undefined;
+    await sendWelcome(product, keys, provisioned[0].expiry, input, origin, portalUrl);
   }
 
   // Notify support per provisioned product (non-fatal).
@@ -248,19 +341,23 @@ async function provisionKeygenTrials(
   const created: ProvisionedTrial[] = [];
   for (const product of products) {
     try {
-      const license = await createTrialLicense(
-        {
-          name: input.name,
-          email: input.email,
-          company: input.company,
-          product,
-          trialDays,
-          preferredCycle: input.cycle,
-          preferredCurrency: input.currency,
-        },
-        dryRun,
-      );
-      created.push({ product, key: license.key, expiry: license.expiry, licenseId: license.id, manageable: false });
+      // FW stays a single (floating) trial key; TMT gets one key per seat (#39).
+      const seatCount = product === "FW" ? 1 : resolveSeatCount(input.seats, product);
+      for (let seatIndex = 0; seatIndex < seatCount; seatIndex++) {
+        const license = await createTrialLicense(
+          {
+            name: input.name,
+            email: input.email,
+            company: input.company,
+            product,
+            trialDays,
+            preferredCycle: input.cycle,
+            preferredCurrency: input.currency,
+          },
+          dryRun,
+        );
+        created.push({ product, key: license.key, expiry: license.expiry, licenseId: license.id, manageable: false });
+      }
     } catch (e) {
       console.error(`${LOG_PREFIX} keygen step failed for ${product} — rolling back`, e);
       for (const c of created) {
@@ -294,9 +391,10 @@ async function provisionStripeTrials(
   const cycle: BillingCycle = input.cycle ?? "monthly";
   const currency: Currency = input.currency ?? "CHF";
 
-  // Seats per product. One for now; #39 will source real per-product seat counts
-  // (FW concurrency vs TMT users are independent — see #42).
-  const seatsFor = (_product: ProductId): number => 1;
+  // Real per-product seat counts from the signup (#39): FW concurrency and TMT
+  // users are independent (see #42). FW → one floating key (maxMachines = seats);
+  // TMT → one device-bound key per seat.
+  const seatsFor = (product: ProductId): number => resolveSeatCount(input.seats, product);
 
   let customerId: string;
   try {
@@ -336,26 +434,23 @@ async function provisionStripeTrials(
     }
     subscriptionId = sub.subscriptionId;
 
-    for (const { product, seats } of items) {
-      // FW → one floating key (maxMachines = seats). TMT → one key per seat.
-      const seatCount = product === "FW" ? 1 : seats;
-      for (let seatIndex = 0; seatIndex < seatCount; seatIndex++) {
-        const license = await createPaidLicense(
-          {
-            product,
-            company: input.company,
-            email: input.email,
-            customerName: input.name,
-            subscriptionId: sub.subscriptionId,
-            stripeCustomerId: customerId,
-            seatIndex,
-            expiresAt: sub.trialEndsAt,
-            ...(product === "FW" ? { maxMachines: seats } : {}),
-          },
-          dryRun,
-        );
-        created.push({ product, key: license.key, expiry: sub.trialEndsAt, licenseId: license.id, manageable: true });
-      }
+    // FW → one floating key (maxMachines = seats); TMT → one key per seat (#39).
+    for (const entry of expandSeatPlan(items)) {
+      const license = await createPaidLicense(
+        {
+          product: entry.product,
+          company: input.company,
+          email: input.email,
+          customerName: input.name,
+          subscriptionId: sub.subscriptionId,
+          stripeCustomerId: customerId,
+          seatIndex: entry.seatIndex,
+          expiresAt: sub.trialEndsAt,
+          ...(entry.maxMachines != null ? { maxMachines: entry.maxMachines } : {}),
+        },
+        dryRun,
+      );
+      created.push({ product: entry.product, key: license.key, expiry: sub.trialEndsAt, licenseId: license.id, manageable: true });
     }
   } catch (e) {
     console.error(`${LOG_PREFIX} stripe trial provision failed — rolling back`, e);
@@ -370,7 +465,7 @@ async function provisionStripeTrials(
 
 async function sendWelcome(
   product: ProductId,
-  licenseKey: string,
+  licenseKeys: string[],
   licenseExpiry: string | null,
   input: SignupInput,
   origin: string,
@@ -379,14 +474,14 @@ async function sendWelcome(
   const dryRun = process.env.DRY_RUN === "true";
   try {
     if (product === "TMT") {
-      // cc-tmgmt: the license key is the access code; the welcome mail carries it
-      // plus the gated per-OS download links. No GitHub invite.
+      // cc-tmgmt: each license key is an access code; the welcome mail carries
+      // all N seat codes plus the gated per-OS download links. No GitHub invite.
       await sendTmgmtWelcome(
         {
           toEmail: input.email,
           customerName: input.name,
           company: input.company,
-          licenseKey,
+          licenseKeys,
           licenseExpiry,
           origin,
           portalUrl,
@@ -405,7 +500,7 @@ async function sendWelcome(
           toEmail: input.email,
           customerName: input.name,
           company: input.company,
-          licenseKey,
+          licenseKey: licenseKeys[0],
           licenseExpiry,
           origin,
           quickstartUrlEn,

@@ -377,7 +377,9 @@ interface TmgmtWelcomeInput {
   toEmail: string;
   customerName: string;
   company: string;
-  licenseKey: string;
+  // One access code per seat (#39): a single-seat trial has one, a multi-seat
+  // trial has N — one device-bound key per user.
+  licenseKeys: string[];
   licenseExpiry: string | null;
   // Base URL of this deployment, used to build gated download links.
   origin: string;
@@ -391,17 +393,25 @@ export async function sendTmgmtWelcome(
 ): Promise<void> {
   const from = required("RESEND_FROM");
 
-  const licensePdf = await buildLicensePdf({
-    productName: productLabel("TMT"),
-    licensee: input.customerName,
-    company: input.company,
-    licenseKey: input.licenseKey,
-    expiresAt: input.licenseExpiry,
-  });
+  const keys = input.licenseKeys.filter((k) => k);
+  const multi = keys.length > 1;
+
+  // One license PDF per seat.
+  const licensePdfs = await Promise.all(
+    keys.map((key) =>
+      buildLicensePdf({
+        productName: productLabel("TMT"),
+        licensee: input.customerName,
+        company: input.company,
+        licenseKey: key,
+        expiresAt: input.licenseExpiry,
+      }),
+    ),
+  );
 
   if (dryRun) {
     console.log(
-      `${LOG_PREFIX} DRY_RUN — would send cc-tmgmt welcome to ${input.toEmail} with a ${licensePdf.length}-byte license PDF`,
+      `${LOG_PREFIX} DRY_RUN — would send cc-tmgmt welcome to ${input.toEmail} with ${keys.length} access code(s) and ${licensePdfs.length} license PDF(s)`,
     );
     return;
   }
@@ -409,16 +419,22 @@ export async function sendTmgmtWelcome(
   const apiKey = required("RESEND_API_KEY");
   const resend = new Resend(apiKey);
 
+  // The gated download works with any valid key — use the first seat's.
   const downloadUrl = (os: "win" | "mac" | "linux") =>
-    `${input.origin}/api/tmgmt/download?os=${os}&key=${encodeURIComponent(input.licenseKey)}`;
+    `${input.origin}/api/tmgmt/download?os=${os}&key=${encodeURIComponent(keys[0] ?? "")}`;
 
+  const codeRows = keys.map((k, i) => (multi ? `Seat ${i + 1}: ${k}` : k)).join("\n");
+  const codeHeading = multi ? "2. Enter the access code per user" : "2. Enter your access code";
+  const codeIntro = multi
+    ? "Start the app on each user's machine and paste that user's access code when prompted:"
+    : "Start the app and paste this access code when prompted:";
   const billing = billingBlock(input.portalUrl);
 
   const html = `
     <h1>Welcome to Verify Test Management</h1>
     <p>Hi ${escape(input.customerName)},</p>
     <p>your Verify Test Management access is ready. The desktop app downloads,
-       updates, and authenticates with the access code below — no GitHub
+       updates, and authenticates with the access code${multi ? "s" : ""} below — no GitHub
        account required.</p>
     <h2>1. Download the app</h2>
     <p>
@@ -426,11 +442,11 @@ export async function sendTmgmtWelcome(
       <a href="${downloadUrl("mac")}">macOS</a> &nbsp;|&nbsp;
       <a href="${downloadUrl("linux")}">Linux</a>
     </p>
-    <h2>2. Enter your access code</h2>
-    <p>Start the app and paste this access code when prompted:</p>
-    <pre>${escape(input.licenseKey)}</pre>
-    <p style="color:#64748b;font-size:13px">Keep this code safe — it unlocks the
-       app and its automatic updates. It is tied to your license; if it expires
+    <h2>${codeHeading}</h2>
+    <p>${codeIntro}</p>
+    <pre>${escape(codeRows)}</pre>
+    <p style="color:#64748b;font-size:13px">Keep ${multi ? "these codes" : "this code"} safe — ${multi ? "they unlock" : "it unlocks"} the
+       app and its automatic updates. ${multi ? "Each is" : "It is"} tied to your license; if it expires
        or is revoked, the app will stop updating.</p>
     ${billing.html}
     <hr>
@@ -444,17 +460,17 @@ export async function sendTmgmtWelcome(
     `Hi ${input.customerName},`,
     ``,
     `your Verify Test Management access is ready. The desktop app downloads,`,
-    `updates, and authenticates with the access code below — no GitHub account`,
+    `updates, and authenticates with the access code${multi ? "s" : ""} below — no GitHub account`,
     `required.`,
     ``,
     `1. Download the app:`,
     `   Windows: ${downloadUrl("win")}`,
     `   macOS:   ${downloadUrl("mac")}`,
     `   Linux:   ${downloadUrl("linux")}`,
-    `2. Start the app and paste this access code when prompted:`,
-    `   ${input.licenseKey}`,
+    `2. ${codeIntro}`,
+    ...codeRows.split("\n").map((l) => `   ${l}`),
     ``,
-    `Keep this code safe — it unlocks the app and its automatic updates.`,
+    `Keep ${multi ? "these codes" : "this code"} safe — ${multi ? "they unlock" : "it unlocks"} the app and its automatic updates.`,
     ...billing.text,
     ``,
     `Questions? support@itsbusiness.ch`,
@@ -466,12 +482,12 @@ export async function sendTmgmtWelcome(
     subject: "Your Verify Test Management access is ready",
     html,
     text,
-    attachments: [
-      {
-        filename: "Verify-Test-Management-license.pdf",
-        content: Buffer.from(licensePdf),
-      },
-    ],
+    attachments: licensePdfs.map((pdf, i) => ({
+      filename: multi
+        ? `Verify-Test-Management-license-seat-${i + 1}.pdf`
+        : "Verify-Test-Management-license.pdf",
+      content: Buffer.from(pdf),
+    })),
   });
 
   if (result.error) {

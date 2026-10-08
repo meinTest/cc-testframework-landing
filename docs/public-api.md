@@ -175,7 +175,9 @@ CORS-locked to `PUBLIC_API_ALLOWED_ORIGINS`.
   "email": "jane@acme.example",
   "company": "Acme AG",
   "plan": "professional",
-  "cycle": "yearly"
+  "cycle": "yearly",
+  "fwSeats": 2,
+  "tmtSeats": 5
 }
 ```
 
@@ -184,12 +186,24 @@ CORS-locked to `PUBLIC_API_ALLOWED_ORIGINS`.
 | `name` | yes | Full name. |
 | `email` | yes | Business email (basic format check). |
 | `company` | yes | Company name. |
-| `plan` | no* | Marketing plan (box) — see the table below. Provisions one trial per product in the plan and sends each product's welcome mail. |
+| `plan` | no* | Marketing plan (box) — see the table below. Provisions one trial per product in the plan; a multi-product plan sends ONE combined welcome mail. |
 | `product` | no* | Single product (`cc-testframework` \| `cc-tmgmt`), for the one-product case. Defaults to `cc-testframework`. Ignored when `plan` is set. |
 | `cycle` | no | `monthly` \| `yearly` — the customer's preference from the box, stored on the license so the later trial→paid upgrade pre-selects it. No charge now. |
 | `currency` | no | `CHF` \| `EUR` \| `USD` — same, stored as a preference. |
+| `seats` | no | Seat count for the trial (default `1`, clamped to `1..999`). Either a number (applies to every product in the plan) or an object `{ "FW": m, "TMT": n }`. |
+| `fwSeats` / `tmtSeats` | no | Explicit per-product seat counts; override `seats`. Use these for Professional to order `m` Framework seats and `n` Verify Test Management seats independently. |
 
 *Send either `plan` (preferred, for the pricing boxes) or `product`. With neither, it defaults to the framework.
+
+### Seats (#39)
+
+Seats are **per product** and independent: **Framework** = concurrency (one floating
+license key whose `maxMachines` equals the seat count — `m` parallel runs from one
+key), **Verify Test Management** = users (one device-bound access code per seat, so
+`n` seats deliver `n` codes). A single-product trial with `n > 1` still sends one
+mail carrying all `n` codes. Seats can also be changed later in the Stripe billing
+portal; the webhook reconciles both models (FW updates `maxMachines`; TMT adds or
+suspends per-seat keys).
 
 ### Plans (which products a box delivers)
 
@@ -201,16 +215,22 @@ CORS-locked to `PUBLIC_API_ALLOWED_ORIGINS`.
 
 A trial is free — `cycle`/`currency` are only a stored preference for the later
 paid upgrade (done in-app), which is where any price applies. "Professional"
-provisions a separate license per product (two keys, two mails); a partial
-provisioning failure rolls back and returns `500`.
+provisions ONE Stripe subscription with a line item per product and sends ONE
+combined welcome mail (the Framework key + all Verify Test Management codes); a
+partial provisioning failure rolls back everything and returns `500`.
 
 ### Example
 
 ```bash
-# Professional box, yearly preference
+# Professional box, yearly preference, 2 Framework seats + 5 TMT seats
 curl -X POST https://app.itsbusiness.ch/api/public/v1/signup \
   -H "Content-Type: application/json" \
-  -d '{"name":"Jane Doe","email":"jane@acme.example","company":"Acme AG","plan":"professional","cycle":"yearly"}'
+  -d '{"name":"Jane Doe","email":"jane@acme.example","company":"Acme AG","plan":"professional","cycle":"yearly","fwSeats":2,"tmtSeats":5}'
+
+# Single product, 3 seats
+curl -X POST https://app.itsbusiness.ch/api/public/v1/signup \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Jane Doe","email":"jane@acme.example","company":"Acme AG","product":"cc-tmgmt","seats":3}'
 ```
 
 ```json
