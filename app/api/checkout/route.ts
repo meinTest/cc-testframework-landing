@@ -13,8 +13,9 @@ import { CURRENCIES, type BillingCycle, type Currency } from "../../pricing";
 
 export const dynamic = "force-dynamic";
 
-// App product → pricing-page route segment (for the cancel URL).
-const PRICING_PATH: Record<ProductId, string> = {
+// App product → product detail page segment (used as the cancel URL; the
+// dedicated /pricing pages were removed, the detail pages remain).
+const PRODUCT_PATH: Record<ProductId, string> = {
   FW: "cc-testframework",
   TMT: "cc-testmanagement",
 };
@@ -56,7 +57,7 @@ export async function GET(request: Request) {
         },
       ],
       success_url: `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/${PRICING_PATH[product]}/pricing`,
+      cancel_url: `${origin}/${PRODUCT_PATH[product]}`,
       billing_address_collection: "required",
       allow_promotion_codes: true,
       // Carried into the subscription so the webhook can map back to our product.

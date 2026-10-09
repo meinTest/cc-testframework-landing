@@ -277,7 +277,26 @@ export async function performSignup(
     const portalUrl = provisioned[0].manageable
       ? `${origin}/api/license/portal?key=${encodeURIComponent(keys[0])}`
       : undefined;
-    await sendWelcome(product, keys, provisioned[0].expiry, input, origin, portalUrl);
+    // Cross-sell the OTHER product as a self-serve add (#39): a Stripe-hosted
+    // Checkout bound to this customer so the added product joins the same
+    // customer. Only when the trial is subscription-backed (a Stripe customer
+    // exists) and the other product is self-serve (offered & not sales-vetted).
+    const other: ProductId = product === "FW" ? "TMT" : "FW";
+    const addProductUrl =
+      provisioned[0].manageable && isOffered(other) && !isVetted(other)
+        ? `${origin}/api/license/add-product?product=${other}&key=${encodeURIComponent(keys[0])}`
+        : undefined;
+    const addProductLabel = addProductUrl ? productLabel(other) : undefined;
+    await sendWelcome(
+      product,
+      keys,
+      provisioned[0].expiry,
+      input,
+      origin,
+      portalUrl,
+      addProductUrl,
+      addProductLabel,
+    );
   }
 
   // Notify support per provisioned product (non-fatal).
@@ -478,6 +497,8 @@ async function sendWelcome(
   input: SignupInput,
   origin: string,
   portalUrl?: string,
+  addProductUrl?: string,
+  addProductLabel?: string,
 ): Promise<void> {
   const dryRun = process.env.DRY_RUN === "true";
   try {
@@ -493,6 +514,8 @@ async function sendWelcome(
           licenseExpiry,
           origin,
           portalUrl,
+          addProductUrl,
+          addProductLabel,
         },
         dryRun,
       );
@@ -514,6 +537,8 @@ async function sendWelcome(
           quickstartUrlEn,
           quickstartUrlDe,
           portalUrl,
+          addProductUrl,
+          addProductLabel,
         },
         dryRun,
       );

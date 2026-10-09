@@ -17,6 +17,9 @@ interface WelcomeInput {
   // Stripe billing-portal link (only for subscription-backed trials, Variante A):
   // where the customer adds a card to convert the trial. Omitted → no section.
   portalUrl?: string;
+  // Optional self-serve "add the other product" link (#39) + its display name.
+  addProductUrl?: string;
+  addProductLabel?: string;
 }
 
 // "Add a card to keep going" section for the welcome mails — only when the trial
@@ -34,6 +37,28 @@ function billingBlock(portalUrl?: string): { html: string; text: string[] } {
       `Keep going after your trial — add a payment method to convert it to a paid`,
       `subscription (or cancel) in the billing portal:`,
       `   ${portalUrl}`,
+    ],
+  };
+}
+
+// Optional "add the other product" self-service link (#39): opens a Stripe-hosted
+// Checkout bound to the customer's EXISTING Stripe customer
+// (/api/license/add-product), so the added product's subscription lands on the
+// same customer and shows in the same portal. Omitted → no section.
+function crossSellBlock(url?: string, productName?: string): { html: string; text: string[] } {
+  if (!url || !productName) return { html: "", text: [] };
+  const name = escape(productName);
+  return {
+    html: `
+    <h2>Need ${name} too?</h2>
+    <p>Add ${name} to your account in a few clicks — it is billed on your existing
+       customer, alongside this subscription:</p>
+    <p><a href="${url}">Add ${name}</a></p>`,
+    text: [
+      ``,
+      `Need ${productName} too? Add it to your account (billed on your existing`,
+      `customer, alongside this subscription):`,
+      `   ${url}`,
     ],
   };
 }
@@ -85,6 +110,7 @@ export async function sendWelcomeEmail(
   const npmrc = `@meintest:registry=${registryUrl}\n${authRef}:_authToken=${input.licenseKey}`;
 
   const billing = billingBlock(input.portalUrl);
+  const crossSell = crossSellBlock(input.addProductUrl, input.addProductLabel);
 
   const html = `
     <h1>Welcome to cc-testframework</h1>
@@ -108,6 +134,7 @@ export async function sendWelcomeEmail(
       <a href="${input.quickstartUrlDe}">Deutsch</a>
     </p>
     ${billing.html}
+    ${crossSell.html}
     <hr>
     <p>Questions? Reply to this email or reach us at
        <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
@@ -130,6 +157,7 @@ export async function sendWelcomeEmail(
     `   English: ${input.quickstartUrlEn}`,
     `   Deutsch: ${input.quickstartUrlDe}`,
     ...billing.text,
+    ...crossSell.text,
     ``,
     `Questions? support@itsbusiness.ch`,
   ].join("\n");
@@ -385,6 +413,9 @@ interface TmgmtWelcomeInput {
   origin: string;
   // Stripe billing-portal link (subscription-backed trials, Variante A). #34.
   portalUrl?: string;
+  // Optional self-serve "add the other product" link (#39) + its display name.
+  addProductUrl?: string;
+  addProductLabel?: string;
 }
 
 export async function sendTmgmtWelcome(
@@ -429,6 +460,7 @@ export async function sendTmgmtWelcome(
     ? "Start the app on each user's machine and paste that user's access code when prompted:"
     : "Start the app and paste this access code when prompted:";
   const billing = billingBlock(input.portalUrl);
+  const crossSell = crossSellBlock(input.addProductUrl, input.addProductLabel);
 
   const html = `
     <h1>Welcome to Verify Test Management</h1>
@@ -449,6 +481,7 @@ export async function sendTmgmtWelcome(
        app and its automatic updates. ${multi ? "Each is" : "It is"} tied to your license; if it expires
        or is revoked, the app will stop updating.</p>
     ${billing.html}
+    ${crossSell.html}
     <hr>
     <p>Questions? Reply to this email or reach us at
        <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
@@ -472,6 +505,7 @@ export async function sendTmgmtWelcome(
     ``,
     `Keep ${multi ? "these codes" : "this code"} safe — ${multi ? "they unlock" : "it unlocks"} the app and its automatic updates.`,
     ...billing.text,
+    ...crossSell.text,
     ``,
     `Questions? support@itsbusiness.ch`,
   ].join("\n");
