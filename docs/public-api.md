@@ -165,8 +165,9 @@ curl https://app.itsbusiness.ch/api/public/v1/plans
 | `generatedAt` | string | ISO timestamp the response was built. |
 
 > `professional` is the "BOTH" bundle: a **plan**, not a product. The signup
-> endpoint accepts `plan=professional` and provisions one subscription with a
-> line item per product (see the signup section below).
+> endpoint accepts `plan=professional` and provisions one Stripe subscription
+> **per product** (two independent subscriptions), so each can be managed and
+> cancelled on its own in the Customer Portal (see the signup section below).
 
 ---
 
@@ -288,13 +289,15 @@ suspends per-seat keys).
 |---|---|---|
 | `starter-framework` | CC-Testframework | Framework (npm setup) |
 | `starter-tmt` | Verify Test Management | TMT (app download + access code) |
-| `professional` | both | both |
+| `professional` | both (one subscription per product) | one combined mail |
 
 A trial is free — `cycle`/`currency` are only a stored preference for the later
 paid upgrade (done in-app), which is where any price applies. "Professional"
-provisions ONE Stripe subscription with a line item per product and sends ONE
-combined welcome mail (the Framework key + all Verify Test Management codes); a
-partial provisioning failure rolls back everything and returns `500`.
+provisions ONE Stripe subscription **per product** (two independent
+subscriptions, so each product is self-service manageable/cancelable in the
+Stripe Customer Portal) and sends ONE combined welcome mail (the Framework key +
+all Verify Test Management codes); a partial provisioning failure rolls back
+everything (all licenses + both subscriptions) and returns `500`.
 
 ### Example
 

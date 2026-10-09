@@ -96,67 +96,6 @@ export async function createTrialSubscription(
   };
 }
 
-export interface PlanTrialItem {
-  product: ProductId;
-  seats: number;
-}
-
-/**
- * Create ONE card-less trialing subscription with a line item per product (the
- * Professional bundle: FW + TMT in a single subscription, each with its own
- * quantity, #42). Returns null if any product has no configured Stripe price.
- */
-export async function createPlanTrialSubscription(
-  input: {
-    customerId: string;
-    items: PlanTrialItem[];
-    cycle: BillingCycle;
-    currency: Currency;
-    trialDays: number;
-  },
-  dryRun: boolean,
-): Promise<TrialSubscription | null> {
-  const trialDays = input.trialDays > 0 ? input.trialDays : DEFAULT_TRIAL_DAYS;
-  const label = input.items.map((i) => `${i.product}×${i.seats}`).join("+");
-
-  if (dryRun) {
-    console.log(
-      `${LOG_PREFIX} DRY_RUN — would start trial for ${label} (${input.cycle}/${input.currency}, ${trialDays}d) on ${input.customerId}`,
-    );
-    return {
-      subscriptionId: "sub_DRYRUN",
-      trialEndsAt: new Date(Date.now() + trialDays * 86_400_000).toISOString(),
-      priceId: "price_DRYRUN",
-    };
-  }
-
-  const lineItems: { price: string; quantity: number }[] = [];
-  for (const it of input.items) {
-    const priceId = (await getStripePricing(it.product))[input.currency]?.[input.cycle]?.priceId;
-    if (!priceId) {
-      console.error(`${LOG_PREFIX} no Stripe price for ${it.product}/${input.currency}/${input.cycle}`);
-      return null;
-    }
-    lineItems.push({ price: priceId, quantity: Math.max(1, it.seats) });
-  }
-
-  const sub = await client().subscriptions.create({
-    customer: input.customerId,
-    items: lineItems,
-    trial_period_days: trialDays,
-    trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
-    // Informational only; the webhook resolves each product per line item.
-    metadata: { app_product: input.items.map((i) => i.product).join("+") },
-  });
-
-  const trialEnd = sub.trial_end ?? Math.floor(Date.now() / 1000) + trialDays * 86_400;
-  return {
-    subscriptionId: sub.id,
-    trialEndsAt: new Date(trialEnd * 1000).toISOString(),
-    priceId: lineItems[0].price,
-  };
-}
-
 /** Best-effort cancel (used to roll back a partially-provisioned signup). */
 export async function cancelSubscription(subscriptionId: string, dryRun: boolean): Promise<void> {
   if (dryRun || !subscriptionId || subscriptionId === "sub_DRYRUN") return;

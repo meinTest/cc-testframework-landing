@@ -11,18 +11,21 @@ This is **opt-in** behind a flag. When off (default), the classic card-less
 ## Flow
 
 1. **Signup** (`/api/public/v1/signup` or `/api/signup`): we create one Stripe
-   **customer** and **one trialing subscription** for the whole plan — a **line
-   item per product** (no payment method, `trial_period_days` = the
-   sales-chosen/default trial length,
-   `trial_settings.end_behavior.missing_payment_method = "cancel"`). Each line
-   item's `quantity` is that product's **seat count** (#39). Keygen licenses
-   mirror the subscription (expiry = trial end, `subscriptionId` in metadata):
+   **customer** and **one trialing subscription per product** (no payment method,
+   `trial_period_days` = the sales-chosen/default trial length,
+   `trial_settings.end_behavior.missing_payment_method = "cancel"`). A
+   single-product plan is one subscription; "Professional" is **two independent
+   subscriptions** (FW + TMT), so each product can be managed and cancelled on
+   its own in the Customer Portal (#39 — the portal cannot add/remove one product
+   from a shared subscription). Each subscription's single line item has
+   `quantity` = that product's **seat count** (#39). Keygen licenses mirror the
+   subscription (expiry = trial end, `subscriptionId` in metadata):
    **Framework** → ONE floating key with `maxMachines` = seats (#41);
    **Verify Test Management** → one device-bound key per seat. The welcome
    mail(s) go out with the keys — a single-product trial sends that product's
    mail (all seat codes in one mail); "Professional" sends **one combined** mail
    (Framework key + all TMT codes, #42). Provisioning is atomic — a partial
-   failure cancels the subscription and deletes the created licenses.
+   failure cancels every created subscription and deletes the created licenses.
 2. **Convert** — the app/portal shows "manage subscription" from day one (the
    license already has a `subscriptionId`, so `billing.manageable` is true). The
    customer adds a card in the **billing portal** (`/api/license/portal`, #13);

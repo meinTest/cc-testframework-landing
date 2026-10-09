@@ -8,7 +8,7 @@ import { sendWelcomeEmail, sendTmgmtWelcome, sendProfessionalWelcome, notifySupp
 import { sanitizeTrialDays, DEFAULT_TRIAL_DAYS } from "./trial";
 import {
   ensureCustomer,
-  createPlanTrialSubscription,
+  createTrialSubscription,
   cancelSubscription,
 } from "./stripe-subscription";
 import {
@@ -376,11 +376,14 @@ async function provisionKeygenTrials(
   return { ok: true, provisioned: created };
 }
 
-// Variante A: one Stripe customer + ONE card-less trialing subscription for the
-// whole plan (a line item per product, #42), each product mirrored by Keygen
-// license(s) — FW = one floating key (maxMachines = seats, #41); TMT = one
-// device-bound key per seat. Atomic: a failure rolls back created licenses AND
-// cancels the subscription.
+// Variante A: one Stripe customer + ONE card-less trialing subscription PER
+// product (#39 self-serve decision). A Professional signup therefore creates
+// TWO independent subscriptions (FW + TMT), so each product can be managed and
+// cancelled on its own in the Stripe Customer Portal (no combined subscription;
+// the portal cannot add/remove a single product from a shared one). Each product
+// is mirrored by Keygen license(s) — FW = one floating key (maxMachines = seats,
+// #41); TMT = one device-bound key per seat. Atomic: a failure rolls back every
+// created license AND cancels every subscription created so far.
 async function provisionStripeTrials(
   products: ProductId[],
   input: SignupInput,
@@ -408,7 +411,7 @@ async function provisionStripeTrials(
   }
 
   const created: ProvisionedTrial[] = [];
-  let subscriptionId: string | null = null;
+  const createdSubs: string[] = [];
   const rollback = async () => {
     for (const c of created) {
       try {
@@ -417,40 +420,45 @@ async function provisionStripeTrials(
         console.error(`${LOG_PREFIX} rollback license ${c.licenseId} failed (non-fatal)`, rb);
       }
     }
-    if (subscriptionId) await cancelSubscription(subscriptionId, dryRun);
+    for (const subId of createdSubs) await cancelSubscription(subId, dryRun);
   };
 
   try {
-    const items = products.map((product) => ({ product, seats: seatsFor(product) }));
-    const sub = await createPlanTrialSubscription(
-      { customerId, items, cycle, currency, trialDays: days },
-      dryRun,
-    );
-    if (!sub) {
-      return {
-        ok: false,
-        outcome: err(502, "No plan is configured for this product yet. Please contact support@itsbusiness.ch."),
-      };
-    }
-    subscriptionId = sub.subscriptionId;
-
-    // FW → one floating key (maxMachines = seats); TMT → one key per seat (#39).
-    for (const entry of expandSeatPlan(items)) {
-      const license = await createPaidLicense(
-        {
-          product: entry.product,
-          company: input.company,
-          email: input.email,
-          customerName: input.name,
-          subscriptionId: sub.subscriptionId,
-          stripeCustomerId: customerId,
-          seatIndex: entry.seatIndex,
-          expiresAt: sub.trialEndsAt,
-          ...(entry.maxMachines != null ? { maxMachines: entry.maxMachines } : {}),
-        },
+    // One separate subscription per product (two for Professional). Each is a
+    // single-product sub so the Customer Portal can manage/cancel it on its own.
+    for (const product of products) {
+      const seats = seatsFor(product);
+      const sub = await createTrialSubscription(
+        { customerId, product, cycle, currency, trialDays: days, seats },
         dryRun,
       );
-      created.push({ product: entry.product, key: license.key, expiry: sub.trialEndsAt, licenseId: license.id, manageable: true });
+      if (!sub) {
+        await rollback();
+        return {
+          ok: false,
+          outcome: err(502, "No plan is configured for this product yet. Please contact support@itsbusiness.ch."),
+        };
+      }
+      createdSubs.push(sub.subscriptionId);
+
+      // FW → one floating key (maxMachines = seats); TMT → one key per seat (#39).
+      for (const entry of expandSeatPlan([{ product, seats }])) {
+        const license = await createPaidLicense(
+          {
+            product: entry.product,
+            company: input.company,
+            email: input.email,
+            customerName: input.name,
+            subscriptionId: sub.subscriptionId,
+            stripeCustomerId: customerId,
+            seatIndex: entry.seatIndex,
+            expiresAt: sub.trialEndsAt,
+            ...(entry.maxMachines != null ? { maxMachines: entry.maxMachines } : {}),
+          },
+          dryRun,
+        );
+        created.push({ product: entry.product, key: license.key, expiry: sub.trialEndsAt, licenseId: license.id, manageable: true });
+      }
     }
   } catch (e) {
     console.error(`${LOG_PREFIX} stripe trial provision failed — rolling back`, e);
