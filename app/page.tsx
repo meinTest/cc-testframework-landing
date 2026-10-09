@@ -18,11 +18,11 @@ export default async function Home({
   const cardFor: Record<ProductId, { name: string; tagline: string; blurb: string; href: string }> = {
     FW: {
       ...t.overview.framework,
-      href: withLang("/cc-testframework/pricing", lang),
+      href: withLang("/signup?product=FW", lang),
     },
     TMT: {
       ...t.overview.mgmt,
-      href: withLang("/cc-testmanagement/pricing", lang),
+      href: withLang("/signup?product=TMT", lang),
     },
   };
   const offered = offeredProducts();
