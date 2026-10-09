@@ -12,6 +12,9 @@ import { appBaseUrl, publicJson, preflight } from "../../../lib/public-http";
 // marketing copy (headlines/features live in the CMS) and no secrets. The
 // catalog itself is code-driven on purpose — new products are set up by us, not
 // self-served (see docs/public-api.md).
+//
+// Prices live in /api/public/v1/pricing (not here) — there are no dedicated
+// pricing pages anymore; the product page slug stays for the detail page.
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +40,6 @@ export function GET(request: Request) {
       slug,
       offered: true,
       cta,
-      pricingUrl: `${base}/${slug}/pricing`,
     };
   });
 

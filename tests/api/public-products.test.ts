@@ -35,7 +35,6 @@ describe("GET /api/public/v1/products", () => {
         slug: string;
         offered: boolean;
         cta: { kind: string; url: string };
-        pricingUrl: string;
       }>;
       generatedAt: string;
     };
@@ -49,7 +48,6 @@ describe("GET /api/public/v1/products", () => {
     assert.equal(tmgmt.name, "Verify Test Management");
     assert.equal(tmgmt.slug, "cc-testmanagement");
     assert.equal(tmgmt.offered, true);
-    assert.equal(tmgmt.pricingUrl, `${BASE}/cc-testmanagement/pricing`);
   });
 
   test("CTA is a self-serve trial when the product is not sales-vetted", async () => {
@@ -103,9 +101,8 @@ describe("GET /api/public/v1/products", () => {
     process.env.LANDING_BASE_URL = "https://example.test";
     const res = await GET(req());
     const body = (await res.json()) as {
-      products: Array<{ pricingUrl: string; cta: { url: string } }>;
+      products: Array<{ cta: { url: string } }>;
     };
-    assert.ok(body.products.every((p) => p.pricingUrl.startsWith("https://example.test/")));
     assert.ok(body.products.every((p) => p.cta.url.startsWith("https://example.test/")));
   });
 

@@ -59,8 +59,7 @@ curl https://app.itsbusiness.ch/api/public/v1/products
       "cta": {
         "kind": "trial",
         "url": "https://app.itsbusiness.ch/signup?product=cc-testframework"
-      },
-      "pricingUrl": "https://app.itsbusiness.ch/cc-testframework/pricing"
+      }
     },
     {
       "id": "cc-tmgmt",
@@ -70,8 +69,7 @@ curl https://app.itsbusiness.ch/api/public/v1/products
       "cta": {
         "kind": "demo",
         "url": "https://app.itsbusiness.ch/demo-request?product=cc-tmgmt&plan=subscription"
-      },
-      "pricingUrl": "https://app.itsbusiness.ch/cc-testmanagement/pricing"
+      }
     }
   ],
   "generatedAt": "2026-09-15T10:00:00.000Z"
@@ -88,8 +86,87 @@ curl https://app.itsbusiness.ch/api/public/v1/products
 | `products[].offered` | boolean | Always `true` here (only offered products are listed). |
 | `products[].cta.kind` | string | `trial` or `demo`. |
 | `products[].cta.url` | string | Absolute deep-link for the primary CTA. |
-| `products[].pricingUrl` | string | Absolute link to the product's pricing page. |
 | `generatedAt` | string | ISO timestamp the response was built. |
+
+> There is no `pricingUrl` — the per-product pricing pages were removed. Pull
+> amounts from `GET /api/public/v1/pricing` instead.
+
+---
+
+## `GET /api/public/v1/plans`
+
+The companion to `/products`: the **plans** (delivery bundles) the site offers.
+A plan is a set of products delivered by one signup — `starter-framework` and
+`starter-tmt` deliver a single product each, `professional` delivers both
+(FW + TMT). Use this to render a bundle/"Professional" box; the per-product
+boxes come from `/products`.
+
+A plan is listed only when **every** product it contains is offered. The CTA is
+resolved server-side from the sales-vetted gate (same rule as `/products`):
+- `selfServe: true`, `cta.kind: "trial"` → self-serve bundle trial at
+  `/signup?plan=<id>` (no product in the plan is sales-vetted).
+- `selfServe: false`, `cta.kind: "demo"` → the bundle is sales-handled; CTA
+  points at `/demo-request`.
+
+Take the CTA URL from `cta.url` rather than building it yourself.
+
+### Example
+
+```bash
+curl https://app.itsbusiness.ch/api/public/v1/plans
+```
+
+```json
+{
+  "plans": [
+    {
+      "id": "starter-framework",
+      "label": "Starter",
+      "products": [{ "id": "FW", "name": "CC-Testframework" }],
+      "offered": true,
+      "selfServe": true,
+      "cta": { "kind": "trial", "url": "https://app.itsbusiness.ch/signup?plan=starter-framework" }
+    },
+    {
+      "id": "starter-tmt",
+      "label": "Starter",
+      "products": [{ "id": "TMT", "name": "Verify Test Management" }],
+      "offered": true,
+      "selfServe": true,
+      "cta": { "kind": "trial", "url": "https://app.itsbusiness.ch/signup?plan=starter-tmt" }
+    },
+    {
+      "id": "professional",
+      "label": "Professional",
+      "products": [
+        { "id": "TMT", "name": "Verify Test Management" },
+        { "id": "FW", "name": "CC-Testframework" }
+      ],
+      "offered": true,
+      "selfServe": true,
+      "cta": { "kind": "trial", "url": "https://app.itsbusiness.ch/signup?plan=professional" }
+    }
+  ],
+  "generatedAt": "2026-10-09T10:00:00.000Z"
+}
+```
+
+### Fields
+
+| Field | Type | Notes |
+|---|---|---|
+| `plans[].id` | string | Stable plan id: `starter-framework` \| `starter-tmt` \| `professional`. |
+| `plans[].label` | string | Marketing label (display copy is the CMS's). |
+| `plans[].products[]` | array | The products the plan delivers, each `{ id, name }`, in provisioning order. |
+| `plans[].offered` | boolean | Always `true` here (only fully-offered plans are listed). |
+| `plans[].selfServe` | boolean | `true` when the bundle can be trialed without sales. |
+| `plans[].cta.kind` | string | `trial` or `demo`. |
+| `plans[].cta.url` | string | Absolute deep-link for the primary CTA. |
+| `generatedAt` | string | ISO timestamp the response was built. |
+
+> `professional` is the "BOTH" bundle: a **plan**, not a product. The signup
+> endpoint accepts `plan=professional` and provisions one subscription with a
+> line item per product (see the signup section below).
 
 ---
 
