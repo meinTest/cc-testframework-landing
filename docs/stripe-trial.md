@@ -64,6 +64,28 @@ unset/`false` to keep the classic Keygen trial.
    (`KEYGEN_PAID_POLICY_ID` / `KEYGEN_TMGMT_PAID_POLICY_ID`), and finally
    `STRIPE_TRIAL_ENABLED=true`.
 
+## Adding the other product during a trial (#39)
+
+A single-product trial's welcome mail carries an **"add the other product"** link
+(`/api/license/add-product?product=<other>&key=<license>`). It resolves the
+customer's existing Stripe customer from the license key and opens a Stripe-hosted
+**card-less trial Checkout** bound to that customer (`payment_method_collection:
+if_required`, `subscription_data.trial_period_days`, `missing_payment_method:
+cancel`) — so the added product starts its **own trialing subscription on the same
+customer** and appears in the one Customer Portal next to the first. No card is
+asked for; a card already on file converts it seamlessly at trial end. The webhook
+(`checkout.session.completed` → reconcile) provisions the Keygen license(s) and
+mails the key(s), exactly like a signup trial. The endpoint is idempotent — if the
+customer already has a (non-dead) subscription for that product it redirects to the
+portal instead of opening a second one.
+
+> **Changing seats during a trial:** by Stripe default, *any* subscription change a
+> customer makes in the Customer Portal **ends the trial and invoices immediately**.
+> To let seat/quantity changes keep the trial running, set
+> `features.subscription_update.trial_update_behavior = "continue"` (API
+> `2025-09-30.clover`+) and enable `adjustable_quantity` per product on the portal
+> configuration.
+
 ## Framework customers
 
 Same model, no special case: a framework signup also creates a trialing

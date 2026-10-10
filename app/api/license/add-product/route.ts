@@ -5,17 +5,21 @@ import { resolveProduct, type ProductId } from "../../../products";
 import { getStripePricing } from "../../../lib/stripe-pricing";
 import { CURRENCIES, type BillingCycle, type Currency } from "../../../pricing";
 import { purchasesEnabled } from "../../../flags";
+import { DEFAULT_TRIAL_DAYS } from "../../signup/lib/trial";
 
 // Self-serve "add another product" link (#39). An existing customer (who already
-// has one product) buys the OTHER product without losing the first: we resolve
-// their EXISTING Stripe customer from their license key and open a Stripe-hosted
-// Checkout bound to that customer, so the new product's subscription lands on the
-// SAME customer and shows up in the one Customer Portal next to the first.
+// has one product in trial) adds the OTHER product as its OWN card-less TRIAL,
+// without losing or changing the first: we resolve their EXISTING Stripe customer
+// from their license key and open a Stripe-hosted Checkout bound to that customer
+// with a trial (no card required now), so the new product's trialing subscription
+// lands on the SAME customer and shows up in the one Customer Portal next to the
+// first. The webhook (checkout.session.completed → reconcile) then provisions the
+// Keygen license(s) and mails the key(s), exactly like a signup trial.
 //
-// Everything after the redirect happens on Stripe — this is a redirect endpoint,
-// not a page (same pattern as /api/license/portal). The welcome/billing mail
-// links here with ?product=<other>&key=<license>. On any problem we redirect to
-// the neutral unavailable page rather than leak a code; no-referrer so the ?key=
+// Everything the customer touches is on Stripe — this is a redirect endpoint, not
+// a page (same pattern as /api/license/portal). The welcome/billing mail links
+// here with ?product=<other>&key=<license>. On any problem we redirect to the
+// neutral unavailable page rather than leak a code; no-referrer so the ?key=
 // never reaches Stripe via the Referer header.
 
 export const dynamic = "force-dynamic";
@@ -74,6 +78,30 @@ export async function GET(request: Request) {
   }
   if (!customerId) return bail();
 
+  // Idempotency: don't open a second subscription for a product the customer
+  // already has (double-click / re-used mail link). If a non-dead subscription
+  // for this product exists, send them to the portal to manage it instead.
+  try {
+    const existing = await stripe.subscriptions.list({
+      customer: customerId,
+      status: "all",
+      limit: 100,
+    });
+    const DEAD = new Set(["canceled", "incomplete_expired"]);
+    const alreadyHas = existing.data.some(
+      (s) => s.metadata?.app_product === product && !DEAD.has(s.status),
+    );
+    if (alreadyHas) {
+      const portal = `${origin}/api/license/portal?key=${encodeURIComponent(
+        licenseKeyFromRequest(request) ?? "",
+      )}&lang=${lang}`;
+      return NextResponse.redirect(portal, { status: 303, headers });
+    }
+  } catch (e) {
+    console.error("[license][add-product] existing-subscription check failed", e);
+    // Non-fatal — fall through and let Checkout proceed.
+  }
+
   const priceId = (await getStripePricing(product))[currency]?.[cycle]?.priceId;
   if (!priceId) return bail();
 
@@ -92,11 +120,20 @@ export async function GET(request: Request) {
       ],
       success_url: `${returnUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/${PRODUCT_PATH[product]}?lang=${lang}`,
-      billing_address_collection: "required",
+      // Card-less trial: the added product starts as a trial just like the first
+      // product did at signup. The customer only confirms on Stripe's page (no
+      // card now); at trial end without a payment method it cancels. A card
+      // already on file converts it seamlessly when the trial ends.
+      payment_method_collection: "if_required",
       allow_promotion_codes: true,
-      // Carried into the subscription so the webhook maps it back to our product.
+      // Carried into the subscription so the webhook maps it back to our product
+      // and provisions + mails the key(s) (checkout.session.completed → reconcile).
       metadata,
-      subscription_data: { metadata },
+      subscription_data: {
+        metadata,
+        trial_period_days: DEFAULT_TRIAL_DAYS,
+        trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
+      },
     });
     return NextResponse.redirect(session.url ?? unavailable, { status: 303, headers });
   } catch (e) {

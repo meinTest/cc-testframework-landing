@@ -50,14 +50,14 @@ function crossSellBlock(url?: string, productName?: string): { html: string; tex
   const name = escape(productName);
   return {
     html: `
-    <h2>Need ${name} too?</h2>
-    <p>Add ${name} to your account in a few clicks — it is billed on your existing
-       customer, alongside this subscription:</p>
-    <p><a href="${url}">Add ${name}</a></p>`,
+    <h2>Want to try ${name} too?</h2>
+    <p>Start a free ${name} trial on the same account — no card required now. You
+       confirm on Stripe and get the key by email, just like this one:</p>
+    <p><a href="${url}">Start ${name} trial</a></p>`,
     text: [
       ``,
-      `Need ${productName} too? Add it to your account (billed on your existing`,
-      `customer, alongside this subscription):`,
+      `Want to try ${productName} too? Start a free trial on the same account`,
+      `(no card required now — you confirm on Stripe and get the key by email):`,
       `   ${url}`,
     ],
   };

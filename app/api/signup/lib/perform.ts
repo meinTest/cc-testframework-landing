@@ -278,9 +278,10 @@ export async function performSignup(
       ? `${origin}/api/license/portal?key=${encodeURIComponent(keys[0])}`
       : undefined;
     // Cross-sell the OTHER product as a self-serve add (#39): a Stripe-hosted
-    // Checkout bound to this customer so the added product joins the same
-    // customer. Only when the trial is subscription-backed (a Stripe customer
-    // exists) and the other product is self-serve (offered & not sales-vetted).
+    // card-less TRIAL checkout bound to this customer, so the added product
+    // starts its own trial on the same customer. Only when the trial is
+    // subscription-backed (a Stripe customer exists) and the other product is
+    // self-serve (offered & not sales-vetted).
     const other: ProductId = product === "FW" ? "TMT" : "FW";
     const addProductUrl =
       provisioned[0].manageable && isOffered(other) && !isVetted(other)
