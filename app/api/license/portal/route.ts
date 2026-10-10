@@ -20,7 +20,11 @@ type PortalResult =
   | { ok: true; url: string }
   | { ok: false; status: number; code: string; message: string; manageable?: boolean };
 
-async function resolvePortal(licenseKey: string, dryRun: boolean): Promise<PortalResult> {
+async function resolvePortal(
+  licenseKey: string,
+  dryRun: boolean,
+  returnUrl?: string,
+): Promise<PortalResult> {
   const ref = await licenseBillingRef(licenseKey, dryRun);
   if (ref.kind === "missing") return { ok: false, status: 401, code: "MISSING_KEY", message: "Missing license key" };
   if (ref.kind === "invalid") return { ok: false, status: 401, code: "INVALID", message: "Invalid license key" };
@@ -33,7 +37,7 @@ async function resolvePortal(licenseKey: string, dryRun: boolean): Promise<Porta
   if (!secret) return { ok: false, status: 502, code: "BILLING_UNAVAILABLE", message: "Billing is not configured" };
 
   const stripe = new Stripe(secret);
-  const returnUrl = process.env.STRIPE_PORTAL_RETURN_URL || DEFAULT_RETURN_URL;
+  const resolvedReturn = returnUrl || process.env.STRIPE_PORTAL_RETURN_URL || DEFAULT_RETURN_URL;
 
   let customerId = ref.customerId;
   if (!customerId && ref.subscriptionId) {
@@ -49,7 +53,7 @@ async function resolvePortal(licenseKey: string, dryRun: boolean): Promise<Porta
   }
 
   try {
-    const session = await stripe.billingPortal.sessions.create({ customer: customerId, return_url: returnUrl });
+    const session = await stripe.billingPortal.sessions.create({ customer: customerId, return_url: resolvedReturn });
     return { ok: true, url: session.url };
   } catch (e) {
     console.error("[license][portal] portal session create failed", e);
@@ -73,7 +77,15 @@ export async function GET(request: Request) {
   const lang = url.searchParams.get("lang") === "en" ? "en" : "de";
   const origin = `${url.protocol}//${url.host}`;
 
-  const r = await resolvePortal(licenseKeyFromRequest(request), dryRun);
+  // Return the customer to the keyed /account hub (not the bare landing), so the
+  // Portal's "Return to…" link lands them already identified by their license key
+  // — able to add the other product onto this SAME Stripe customer instead of
+  // starting a fresh signup that would create a second customer (#39).
+  const key = licenseKeyFromRequest(request);
+  const returnUrl = key
+    ? `${origin}/account?key=${encodeURIComponent(key)}&lang=${lang}`
+    : undefined;
+  const r = await resolvePortal(key, dryRun, returnUrl);
   // no-referrer so the ?key= never leaks to the Stripe host via the Referer header.
   const headers = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
   const target = r.ok ? r.url : `${origin}/unavailable?lang=${lang}`;
