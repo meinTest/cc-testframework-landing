@@ -82,9 +82,16 @@ portal instead of opening a second one.
 > **Changing seats during a trial:** by Stripe default, *any* subscription change a
 > customer makes in the Customer Portal **ends the trial and invoices immediately**.
 > To let seat/quantity changes keep the trial running, set
-> `features.subscription_update.trial_update_behavior = "continue"` (API
-> `2025-09-30.clover`+) and enable `adjustable_quantity` per product on the portal
-> configuration.
+> `features.subscription_update.trial_update_behavior = "continue_trial"` (API
+> `2025-09-30.clover`+) on the DEFAULT portal configuration, enable `subscription_update`
+> with `default_allowed_updates: ["quantity"]` (no `"price"` → no plan switching) and
+> list the products with `adjustable_quantity`.
+>
+> Gotchas: (1) the API **requires a non-empty `products` list** when
+> `subscription_update` is enabled, even for quantity-only (the Dashboard allows it
+> empty, the API does not). (2) **Saving the portal settings in the Dashboard — or
+> switching the portal version — resets `trial_update_behavior` back to `end_trial`**,
+> so re-apply it via the API afterwards. There is no Dashboard toggle for it.
 
 ## Framework customers
 
