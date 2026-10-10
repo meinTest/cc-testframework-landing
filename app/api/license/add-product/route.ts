@@ -24,8 +24,6 @@ import { DEFAULT_TRIAL_DAYS } from "../../signup/lib/trial";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_RETURN_URL = "https://itsbusiness.vercel.app";
-
 // Product detail page (used as the cancel URL — these routes still exist).
 const PRODUCT_PATH: Record<ProductId, string> = {
   FW: "cc-testframework",
@@ -51,7 +49,11 @@ export async function GET(request: Request) {
   const seats = clampSeats(url.searchParams.get("seats"));
 
   const dryRun = process.env.DRY_RUN === "true";
-  const ref = await licenseBillingRef(licenseKeyFromRequest(request), dryRun);
+  const licenseKey = licenseKeyFromRequest(request);
+  // After checkout, send the customer back into the Stripe portal (keyed), not to
+  // our thank-you page — our portal endpoint mints a fresh session and redirects.
+  const portalUrl = `${origin}/api/license/portal?key=${encodeURIComponent(licenseKey)}&lang=${lang}`;
+  const ref = await licenseBillingRef(licenseKey, dryRun);
   if (ref.kind !== "ok") return bail();
 
   if (dryRun) {
@@ -92,10 +94,7 @@ export async function GET(request: Request) {
       (s) => s.metadata?.app_product === product && !DEAD.has(s.status),
     );
     if (alreadyHas) {
-      const portal = `${origin}/api/license/portal?key=${encodeURIComponent(
-        licenseKeyFromRequest(request) ?? "",
-      )}&lang=${lang}`;
-      return NextResponse.redirect(portal, { status: 303, headers });
+      return NextResponse.redirect(portalUrl, { status: 303, headers });
     }
   } catch (e) {
     console.error("[license][add-product] existing-subscription check failed", e);
@@ -105,7 +104,6 @@ export async function GET(request: Request) {
   const priceId = (await getStripePricing(product))[currency]?.[cycle]?.priceId;
   if (!priceId) return bail();
 
-  const returnUrl = process.env.STRIPE_PORTAL_RETURN_URL || DEFAULT_RETURN_URL;
   try {
     const metadata = { app_product: product };
     const session = await stripe.checkout.sessions.create({
@@ -118,7 +116,9 @@ export async function GET(request: Request) {
           adjustable_quantity: { enabled: true, minimum: 1, maximum: 999 },
         },
       ],
-      success_url: `${returnUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      // Back into the Stripe customer portal after checkout (keyed), so the
+      // customer sees both subscriptions — not our thank-you page.
+      success_url: portalUrl,
       cancel_url: `${origin}/${PRODUCT_PATH[product]}?lang=${lang}`,
       // Card-less trial: the added product starts as a trial just like the first
       // product did at signup. The customer only confirms on Stripe's page (no
