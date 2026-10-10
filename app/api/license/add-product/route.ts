@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
 // Product detail page (used as the cancel URL — these routes still exist).
 const PRODUCT_PATH: Record<ProductId, string> = {
   FW: "cc-testframework",
-  TMT: "cc-testmanagement",
+  TMT: "verify-test-management",
 };
 
 export async function GET(request: Request) {

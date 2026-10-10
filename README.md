@@ -11,7 +11,7 @@ Next.js 16 (App Router), Tailwind CSS, hosted on Vercel.
 
 - `/` — Product overview (two cards: CC-Testframework, CC-Testmanagement), bilingual DE/EN
 - `/cc-testframework` — Product detail, flag-aware "Start Trial"/"Request Demo" CTA
-- `/cc-testmanagement` — Product detail (cc-tmgmt), sales-led "Request Demo" CTA (Phase 1: no self-serve trial yet)
+- `/verify-test-management` — Product detail (cc-tmgmt), sales-led "Request Demo" CTA (Phase 1: no self-serve trial yet)
 - `/signup` — Trial signup form (POSTs to `/api/signup`)
 - `/api/signup` — Real orchestration (Keygen + GitHub App + Resend)
 

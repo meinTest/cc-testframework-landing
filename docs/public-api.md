@@ -64,7 +64,7 @@ curl https://app.itsbusiness.ch/api/public/v1/products
     {
       "id": "cc-tmgmt",
       "name": "Verify Test Management",
-      "slug": "cc-testmanagement",
+      "slug": "verify-test-management",
       "offered": true,
       "cta": {
         "kind": "demo",

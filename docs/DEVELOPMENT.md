@@ -143,7 +143,7 @@ Conventional Commits Pflicht (`feat:`/`fix:`/`docs:`/`chore:`), Footer
 ```
 app/page.tsx                         Produkt-Übersicht (offered-aware, bilingual)
 app/cc-testframework/page.tsx        Detailseite Framework
-app/cc-testmanagement/page.tsx       Detailseite cc-tmgmt
+app/verify-test-management/page.tsx  Detailseite cc-tmgmt
 app/content.ts                       Bilinguale Copy (DE/EN) + lang-Helper
 app/products.ts                      Produkt-Registry: ProductId, Labels, offeredProducts()
 app/Header.tsx, app/LangToggle.tsx   Site-Chrome + Sprach-Umschalter

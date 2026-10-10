@@ -71,9 +71,6 @@ export default async function ManagementPage({
             >
               {primaryCta.label}
             </Link>
-            <span className="inline-flex items-center justify-center rounded-md border border-slate-200 px-6 py-3 text-base font-medium text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              {t.common.docsComingSoon}
-            </span>
           </div>
 
           <p className="mt-12 text-sm text-slate-400 dark:text-slate-500">

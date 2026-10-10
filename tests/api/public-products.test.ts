@@ -46,7 +46,7 @@ describe("GET /api/public/v1/products", () => {
 
     const tmgmt = body.products.find((p) => p.id === "TMT")!;
     assert.equal(tmgmt.name, "Verify Test Management");
-    assert.equal(tmgmt.slug, "cc-testmanagement");
+    assert.equal(tmgmt.slug, "verify-test-management");
     assert.equal(tmgmt.offered, true);
   });
 

@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 // dedicated /pricing pages were removed, the detail pages remain).
 const PRODUCT_PATH: Record<ProductId, string> = {
   FW: "cc-testframework",
-  TMT: "cc-testmanagement",
+  TMT: "verify-test-management",
 };
 
 export async function GET(request: Request) {

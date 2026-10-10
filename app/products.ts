@@ -24,14 +24,14 @@ export const PRODUCT_LABELS: Record<ProductId, string> = {
 };
 
 /**
- * URL slug of each product's detail/pricing pages (e.g. /cc-testmanagement,
- * /cc-testmanagement/pricing). These are stable page paths and are deliberately
- * NOT renamed by #43 (SEO / existing links). Single source of truth for the
- * checkout cancel URL and the public products API links.
+ * URL slug of each product's detail page (e.g. /cc-testframework,
+ * /verify-test-management). Single source of truth for the checkout cancel URL
+ * and the public products API links. The old TMT slug `cc-testmanagement` is
+ * redirected to `verify-test-management` in next.config.ts for existing links.
  */
 export const PRODUCT_SLUGS: Record<ProductId, string> = {
   FW: "cc-testframework",
-  TMT: "cc-testmanagement",
+  TMT: "verify-test-management",
 };
 
 // Canonical + legacy identifiers → canonical ProductId. Keep the legacy ids for
