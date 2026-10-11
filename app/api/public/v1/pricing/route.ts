@@ -1,10 +1,16 @@
 import { coerceProduct, offeredProducts } from "../../../../products";
-import { CURRENCIES, YEARLY_DISCOUNT_PCT, type Currency } from "../../../../pricing";
-import { getDisplayPrices, getStripePricing } from "../../../../lib/stripe-pricing";
+import { CURRENCIES, type Currency } from "../../../../pricing";
+import {
+  getDisplayPrices,
+  hasStripePrices,
+  stripeYearlyDiscountPct,
+} from "../../../../lib/stripe-pricing";
 import { publicJson, publicError, preflight } from "../../../lib/public-http";
 
-// Public, read-only pricing for the CMS. Live Stripe amounts where present, else
-// the in-code fallback (source flag says which). Optional query params:
+// Public, read-only pricing for the CMS. Amounts come from Stripe ONLY (#35):
+// there is no in-code fallback. A product with no Stripe price has
+// `available:false`; a missing currency/cycle amount is `null`. The CMS must
+// render "price unavailable" for null/unavailable rather than a stale number.
 //   ?product=TMT       → just that product (default: all offered)
 //   ?currency=EUR       → just that currency (default: CHF, EUR, USD)
 // Returns whole-unit amounts only — never Stripe price IDs or other internals.
@@ -48,13 +54,10 @@ export async function GET(request: Request) {
 
   const products: Record<string, unknown> = {};
   for (const id of productIds) {
-    const [display, stripe] = await Promise.all([
+    const [display, available] = await Promise.all([
       getDisplayPrices(id),
-      getStripePricing(id),
+      hasStripePrices(id),
     ]);
-    // Product-level source flag: "stripe" if any Stripe price backs this
-    // product, else the in-code fallback config.
-    const source = Object.keys(stripe).length > 0 ? "stripe" : "fallback";
 
     const prices: Record<string, unknown> = {};
     for (const currency of currencies) {
@@ -62,15 +65,17 @@ export async function GET(request: Request) {
       prices[currency] = {
         monthly: row.monthly,
         yearly: row.yearly,
-        // Convenience for "X / month, billed yearly" copy.
-        monthlyEquivalent: Math.round(row.yearly / 12),
+        // Convenience for "X / month, billed yearly" copy; null if no yearly price.
+        monthlyEquivalent: row.yearly != null ? Math.round(row.yearly / 12) : null,
       };
     }
-    products[id] = { source, prices };
+    // `available` is false when Stripe has no price for this product at all —
+    // the CMS should then show "pricing unavailable", not a number (#35).
+    products[id] = { available, prices };
   }
 
   return publicJson(request, {
-    yearlyDiscountPct: YEARLY_DISCOUNT_PCT,
+    yearlyDiscountPct: await stripeYearlyDiscountPct(),
     unit: "per_user_per_month",
     currencies: [...CURRENCIES],
     cycles: ["monthly", "yearly"],

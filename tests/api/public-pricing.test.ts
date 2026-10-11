@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import { GET, OPTIONS } from "../../app/api/public/v1/pricing/route";
 
 // Integration tests for GET /api/public/v1/pricing. With no STRIPE_SECRET_KEY
-// the route serves the in-code fallback config deterministically (source:
-// "fallback"), so these run without any network.
+// there are NO prices (Stripe is the only source, #35): amounts come back `null`
+// and `available:false`, deterministically, so these run without any network.
 
 const BASE = "https://app.itsbusiness.ch";
 const ALLOWED = "https://www.itsbusiness.ch";
@@ -17,28 +17,28 @@ function req(query = "", opts: { origin?: string } = {}): Request {
 }
 
 interface PriceRow {
-  monthly: number;
-  yearly: number;
-  monthlyEquivalent: number;
+  monthly: number | null;
+  yearly: number | null;
+  monthlyEquivalent: number | null;
 }
 interface PricingBody {
-  yearlyDiscountPct: number;
+  yearlyDiscountPct: number | null;
   unit: string;
   currencies: string[];
   cycles: string[];
-  products: Record<string, { source: string; prices: Record<string, PriceRow> }>;
+  products: Record<string, { available: boolean; prices: Record<string, PriceRow> }>;
   generatedAt: string;
 }
 
 beforeEach(() => {
   process.env.LANDING_BASE_URL = BASE;
   delete process.env.PRODUCTS_OFFERED;
-  delete process.env.STRIPE_SECRET_KEY; // force the fallback config
+  delete process.env.STRIPE_SECRET_KEY; // no Stripe → no prices (no fallback, #35)
   process.env.PUBLIC_API_ALLOWED_ORIGINS = ALLOWED;
 });
 
 describe("GET /api/public/v1/pricing", () => {
-  test("returns fallback pricing for all offered products and currencies", async () => {
+  test("without Stripe: amounts are null and available:false (no fallback)", async () => {
     const res = await GET(req());
     assert.equal(res.status, 200);
 
@@ -46,22 +46,31 @@ describe("GET /api/public/v1/pricing", () => {
     assert.equal(body.unit, "per_user_per_month");
     assert.deepEqual(body.currencies, ["CHF", "EUR", "USD"]);
     assert.deepEqual(body.cycles, ["monthly", "yearly"]);
-    assert.equal(typeof body.yearlyDiscountPct, "number");
+    // No Stripe prices → no derivable discount, no hardcoded default.
+    assert.equal(body.yearlyDiscountPct, null);
     assert.deepEqual(Object.keys(body.products).sort(), ["FW", "TMT"]);
 
     const tmgmt = body.products["TMT"];
-    assert.equal(tmgmt.source, "fallback");
-    // In-code base is 45 CHF/user/month; yearly = 12×45×(1-0.1) = 486.
-    assert.equal(tmgmt.prices.CHF.monthly, 45);
-    assert.equal(tmgmt.prices.CHF.yearly, 486);
+    assert.equal(tmgmt.available, false);
+    // No in-code fallback: amounts are null, never 45/486.
+    assert.equal(tmgmt.prices.CHF.monthly, null);
+    assert.equal(tmgmt.prices.CHF.yearly, null);
+    assert.equal(tmgmt.prices.CHF.monthlyEquivalent, null);
   });
 
-  test("monthlyEquivalent is yearly/12 rounded", async () => {
+  test("never surfaces a fallback source flag", async () => {
+    const res = await GET(req());
+    const raw = await res.text();
+    assert.ok(!/fallback/i.test(raw), "response must not mention a fallback source");
+  });
+
+  test("monthlyEquivalent is yearly/12 rounded, or null when no yearly price", async () => {
     const res = await GET(req());
     const body = (await res.json()) as PricingBody;
     for (const product of Object.values(body.products)) {
       for (const row of Object.values(product.prices)) {
-        assert.equal(row.monthlyEquivalent, Math.round(row.yearly / 12));
+        const expected = row.yearly != null ? Math.round(row.yearly / 12) : null;
+        assert.equal(row.monthlyEquivalent, expected);
       }
     }
   });

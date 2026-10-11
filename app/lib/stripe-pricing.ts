@@ -1,19 +1,14 @@
 import Stripe from "stripe";
 import { coerceProduct, type ProductId } from "../products";
-import {
-  CURRENCIES,
-  getProductPrices,
-  type BillingCycle,
-  type Currency,
-  type ProductPrices,
-} from "../pricing";
+import { CURRENCIES, type BillingCycle, type Currency } from "../pricing";
 
 // Reads subscription prices from Stripe (the single source of truth: sales
 // manages them in the dashboard). Each Stripe Product is mapped to our product
 // via an `app_product` metadata key — canonical "FW"/"TMT" OR the legacy
 // "cc-testframework"/"cc-tmgmt" (coerced to canonical, #43). Results are cached
-// in-process for a few minutes. If Stripe is not configured/reachable or a price
-// is missing, the pricing pages fall back to the in-code config.
+// in-process for a few minutes. There is NO in-code fallback (#35): if a Stripe
+// price is missing or Stripe is unreachable, the amount is reported as `null`
+// ("unavailable") rather than a silently-wrong hardcoded number.
 
 export interface CyclePrice {
   amount: number; // major units (whole CHF/EUR/USD)
@@ -94,17 +89,47 @@ export async function getStripePricing(
   return (await getAll())[product] ?? {};
 }
 
-/** Display prices: Stripe amount where present, else the in-code config default. */
-export async function getDisplayPrices(product: ProductId): Promise<ProductPrices> {
-  const config = getProductPrices(product);
-  const stripe = await getStripePricing(product);
+export interface DisplayRow {
+  monthly: number | null;
+  yearly: number | null;
+}
+export type DisplayPrices = Record<Currency, DisplayRow>;
 
-  const out = {} as ProductPrices;
+/**
+ * Display prices from Stripe ONLY (#35). A currency/cycle with no Stripe price
+ * (or Stripe unreachable) is `null` — "unavailable" — never a hardcoded default.
+ */
+export async function getDisplayPrices(product: ProductId): Promise<DisplayPrices> {
+  const stripe = await getStripePricing(product);
+  const out = {} as DisplayPrices;
   for (const currency of CURRENCIES) {
     out[currency] = {
-      monthly: stripe[currency]?.monthly?.amount ?? config[currency].monthly,
-      yearly: stripe[currency]?.yearly?.amount ?? config[currency].yearly,
+      monthly: stripe[currency]?.monthly?.amount ?? null,
+      yearly: stripe[currency]?.yearly?.amount ?? null,
     };
   }
   return out;
+}
+
+/** True if Stripe has any price for this product (→ "available" for display). */
+export async function hasStripePrices(product: ProductId): Promise<boolean> {
+  return Object.keys(await getStripePricing(product)).length > 0;
+}
+
+/**
+ * Representative yearly-discount percentage, DERIVED from Stripe (first product/
+ * currency that has both a monthly and a yearly price): round((1 − yearly/(12×
+ * monthly)) × 100). `null` when no such pair exists in Stripe — no hardcoded
+ * default (#35).
+ */
+export async function stripeYearlyDiscountPct(): Promise<number | null> {
+  const all = await getAll();
+  for (const product of Object.values(all)) {
+    for (const byCurrency of Object.values(product)) {
+      const m = byCurrency?.monthly?.amount;
+      const y = byCurrency?.yearly?.amount;
+      if (m && y && m > 0) return Math.round((1 - y / (12 * m)) * 100);
+    }
+  }
+  return null;
 }

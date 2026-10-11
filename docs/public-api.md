@@ -198,7 +198,7 @@ curl "https://app.itsbusiness.ch/api/public/v1/pricing?product=cc-tmgmt&currency
   "cycles": ["monthly", "yearly"],
   "products": {
     "cc-tmgmt": {
-      "source": "stripe",
+      "available": true,
       "prices": {
         "EUR": { "monthly": 47, "yearly": 510, "monthlyEquivalent": 43 }
       }
@@ -212,21 +212,23 @@ curl "https://app.itsbusiness.ch/api/public/v1/pricing?product=cc-tmgmt&currency
 
 | Field | Type | Notes |
 |---|---|---|
-| `yearlyDiscountPct` | number | Discount on the annual total, e.g. `10`. |
+| `yearlyDiscountPct` | number \| null | Discount on the annual total, derived from Stripe (e.g. `10`); `null` when no monthly+yearly pair exists in Stripe. |
 | `unit` | string | `per_user_per_month` (render your own label). |
 | `currencies` / `cycles` | string[] | Supported sets, for building toggles. |
-| `products[id].source` | string | `stripe` (live) or `fallback` (in-code default). |
-| `products[id].prices[cur].monthly` | number | Monthly price per user. |
-| `products[id].prices[cur].yearly` | number | Discounted annual total per user. |
-| `products[id].prices[cur].monthlyEquivalent` | number | `yearly / 12` rounded — for "X / month, billed yearly". |
+| `products[id].available` | boolean | `false` when Stripe has no price for this product — render "pricing unavailable", not a number. |
+| `products[id].prices[cur].monthly` | number \| null | Monthly price per user; `null` if that Stripe price is missing. |
+| `products[id].prices[cur].yearly` | number \| null | Discounted annual total per user; `null` if missing. |
+| `products[id].prices[cur].monthlyEquivalent` | number \| null | `yearly / 12` rounded — for "X / month, billed yearly"; `null` if no yearly price. |
 | `generatedAt` | string | ISO timestamp. |
 
 ### Pricing source
 
-Amounts come from Stripe when a matching Stripe Price exists for the product
-(`source: "stripe"`); otherwise the in-code default config is served
-(`source: "fallback"`). Marketing maintains the amounts in Stripe — no code
-change needed for a price change on an existing product.
+Amounts come from **Stripe only** — there is no in-code fallback (#35). Marketing
+maintains the amounts in Stripe — no code change needed for a price change on an
+existing product. If a Stripe price is missing (or Stripe is unreachable), the
+amount is `null` and `available` is `false` — the CMS must render "pricing
+unavailable" rather than a stale number. This is deliberate: a visible gap beats
+a silently-wrong price.
 
 ---
 
@@ -360,8 +362,9 @@ matching HTTP status and `Cache-Control: no-store`.
 | `404` | `UNKNOWN_PRODUCT` | `product` is not a known/offered product. |
 | `400` | `UNKNOWN_CURRENCY` | `currency` is not one of `CHF`, `EUR`, `USD`. |
 
-The pricing endpoint never hard-fails on missing Stripe data — it serves the
-fallback config instead, so the marketing page always has numbers.
+The pricing endpoint never hard-fails on missing Stripe data — it returns `200`
+with `available:false` / `null` amounts for the affected product (no in-code
+fallback, #35), so the CMS can show "pricing unavailable" instead of a stale number.
 
 ---
 
