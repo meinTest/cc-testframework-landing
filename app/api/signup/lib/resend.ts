@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { productLabel, type ProductId } from "../../../products";
 import { buildLicensePdf } from "./license-pdf";
+import { createLinkToken } from "../../license/lib/link-token";
 
 const LOG_PREFIX = "[signup][resend]";
 
@@ -450,9 +451,11 @@ export async function sendTmgmtWelcome(
   const apiKey = required("RESEND_API_KEY");
   const resend = new Resend(apiKey);
 
-  // The gated download works with any valid key — use the first seat's.
+  // The gated download works with any valid key — use the first seat's, wrapped
+  // in a short-lived opaque token so the raw key never travels in the URL (#37).
+  const dlToken = createLinkToken(keys[0] ?? "", "download");
   const downloadUrl = (os: "win" | "mac" | "linux") =>
-    `${input.origin}/api/tmgmt/download?os=${os}&key=${encodeURIComponent(keys[0] ?? "")}`;
+    `${input.origin}/api/tmgmt/download?os=${os}&t=${encodeURIComponent(dlToken)}`;
 
   const codeRows = keys.map((k, i) => (multi ? `Seat ${i + 1}: ${k}` : k)).join("\n");
   const codeHeading = multi ? "2. Enter the access code per user" : "2. Enter your access code";
@@ -595,8 +598,10 @@ export async function sendProfessionalWelcome(
   const registryUrl = `${origin}${registryPath}`;
   const authRef = `${origin.replace(/^https?:/, "")}${registryPath}`;
   const npmrc = `@meintest:registry=${registryUrl}\n${authRef}:_authToken=${input.fwKey}`;
+  // Download link carries a short-lived opaque token, not the raw key (#37).
+  const dlToken = createLinkToken(input.tmtKeys[0] ?? "", "download");
   const downloadUrl = (os: "win" | "mac" | "linux") =>
-    `${origin}/api/tmgmt/download?os=${os}&key=${encodeURIComponent(input.tmtKeys[0] ?? "")}`;
+    `${origin}/api/tmgmt/download?os=${os}&t=${encodeURIComponent(dlToken)}`;
 
   const tmtRows = input.tmtKeys
     .map((k, i) => (input.tmtKeys.length === 1 ? k : `Seat ${i + 1}: ${k}`))

@@ -13,6 +13,7 @@ import {
   getFeedText,
   type TargetOs,
 } from "./releases";
+import { redeemLinkToken } from "../../license/lib/link-token";
 import {
   getProxiedPackument,
   resolveOriginalTarball,
@@ -52,7 +53,23 @@ export async function handleDownload(request: Request): Promise<Response> {
     });
   }
 
-  const licenseKey = licenseKeyFromRequest(request);
+  // Welcome-mail links carry a short-lived opaque token (?t=) instead of the raw
+  // key (#37). Prefer it; fall back to Bearer / ?key= for the app and for links
+  // in already-sent mails.
+  const token = params.get("t");
+  let licenseKey: string;
+  if (token) {
+    const redeemed = redeemLinkToken(token, "download");
+    if (!redeemed.ok) {
+      return new NextResponse("This download link is invalid or has expired", {
+        status: 401,
+        headers: noStore(),
+      });
+    }
+    licenseKey = redeemed.key;
+  } else {
+    licenseKey = licenseKeyFromRequest(request);
+  }
   if (channel === "qa") {
     const qa = await checkQaEntitlement(licenseKey, dryRun);
     if (!qa.ok) {

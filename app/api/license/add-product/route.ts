@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { licenseBillingRef, licenseKeyFromRequest } from "../../tmgmt/lib/entitlement";
+import { createLinkToken, redeemLinkToken } from "../lib/link-token";
 import { resolveProduct, type ProductId } from "../../../products";
 import { getStripePricing } from "../../../lib/stripe-pricing";
 import { CURRENCIES, type BillingCycle, type Currency } from "../../../pricing";
@@ -49,10 +50,21 @@ export async function GET(request: Request) {
   const seats = clampSeats(url.searchParams.get("seats"));
 
   const dryRun = process.env.DRY_RUN === "true";
-  const licenseKey = licenseKeyFromRequest(request);
-  // After checkout, send the customer back into the Stripe portal (keyed), not to
-  // our thank-you page — our portal endpoint mints a fresh session and redirects.
-  const portalUrl = `${origin}/api/license/portal?key=${encodeURIComponent(licenseKey)}&lang=${lang}`;
+  // The mail / account link carries an opaque token (?t=) instead of the raw key
+  // (#37); fall back to ?key= for already-sent mails and in-app links.
+  const token = url.searchParams.get("t");
+  let licenseKey = "";
+  if (token) {
+    const redeemed = redeemLinkToken(token, "add-product");
+    if (redeemed.ok) licenseKey = redeemed.key; // else "" → billingRef bails → unavailable
+  } else {
+    licenseKey = licenseKeyFromRequest(request);
+  }
+  // After checkout, send the customer back into the Stripe portal — our portal
+  // endpoint mints a fresh session and redirects. Token, not raw key, in the URL.
+  const portalUrl = licenseKey
+    ? `${origin}/api/license/portal?t=${encodeURIComponent(createLinkToken(licenseKey, "portal", 24))}&lang=${lang}`
+    : unavailable;
   const ref = await licenseBillingRef(licenseKey, dryRun);
   if (ref.kind !== "ok") return bail();
 

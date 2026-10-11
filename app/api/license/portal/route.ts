@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { licenseBillingRef, licenseKeyFromRequest } from "../../tmgmt/lib/entitlement";
+import { createLinkToken, redeemLinkToken } from "../lib/link-token";
 
 // On-demand Stripe billing-portal link for a license (#13). The customer (App or
 // Framework via CC_LICENSE_KEY) authenticates with their license key; we resolve
@@ -77,13 +78,24 @@ export async function GET(request: Request) {
   const lang = url.searchParams.get("lang") === "en" ? "en" : "de";
   const origin = `${url.protocol}//${url.host}`;
 
+  // The welcome-mail link carries an opaque token (?t=) instead of the raw key
+  // (#37); fall back to ?key= for already-sent mails.
+  const token = url.searchParams.get("t");
+  let key = "";
+  if (token) {
+    const redeemed = redeemLinkToken(token, "portal");
+    if (redeemed.ok) key = redeemed.key; // else key stays "" → resolvePortal 401 → unavailable
+  } else {
+    key = licenseKeyFromRequest(request);
+  }
+
   // Return the customer to the keyed /account hub (not the bare landing), so the
-  // Portal's "Return to…" link lands them already identified by their license key
-  // — able to add the other product onto this SAME Stripe customer instead of
-  // starting a fresh signup that would create a second customer (#39).
-  const key = licenseKeyFromRequest(request);
+  // Portal's "Return to…" link lands them already identified by their license —
+  // able to add the other product onto this SAME Stripe customer instead of
+  // starting a fresh signup that would create a second customer (#39). The return
+  // URL also carries a token, not the raw key, so it never reappears in a URL.
   const returnUrl = key
-    ? `${origin}/account?key=${encodeURIComponent(key)}&lang=${lang}`
+    ? `${origin}/account?t=${encodeURIComponent(createLinkToken(key, "account", 24))}&lang=${lang}`
     : undefined;
   const r = await resolvePortal(key, dryRun, returnUrl);
   // no-referrer so the ?key= never leaks to the Stripe host via the Referer header.

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { resolveLang } from "../content";
 import { licenseCheckoutInfo } from "../api/tmgmt/lib/entitlement";
+import { createLinkToken, redeemLinkToken } from "../api/license/lib/link-token";
 import { isOffered, isVetted, productLabel, type ProductId } from "../products";
 
 // Keyed self-service hub (#39). This is where the Stripe Customer Portal's
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
 };
 
 interface AccountPageProps {
-  searchParams: Promise<{ key?: string; lang?: string }>;
+  searchParams: Promise<{ key?: string; t?: string; lang?: string }>;
 }
 
 const T = {
@@ -61,10 +62,16 @@ const T = {
 } as const;
 
 export default async function AccountPage({ searchParams }: AccountPageProps) {
-  const { key: keyParam, lang: langParam } = await searchParams;
+  const { key: keyParam, t: tokenParam, lang: langParam } = await searchParams;
   const lang = resolveLang(langParam);
   const t = T[lang];
-  const key = (keyParam ?? "").trim();
+  // The portal's "Return to…" link carries an opaque token (?t=) instead of the
+  // raw key (#37); fall back to ?key= for already-sent links.
+  let key = (keyParam ?? "").trim();
+  if (!key && tokenParam) {
+    const redeemed = redeemLinkToken(tokenParam, "account");
+    if (redeemed.ok) key = redeemed.key;
+  }
 
   const info = key
     ? await licenseCheckoutInfo(key, process.env.DRY_RUN === "true")
@@ -79,7 +86,14 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const canAddOther =
     !!other && resolved?.manageable && isOffered(other) && !isVetted(other);
 
-  const enc = encodeURIComponent(key);
+  // The page's own outgoing links carry fresh short-lived tokens, not the raw key.
+  const portalHref = key
+    ? `/api/license/portal?t=${encodeURIComponent(createLinkToken(key, "portal", 24))}&lang=${lang}`
+    : "#";
+  const addProductHref = (p: ProductId) =>
+    key
+      ? `/api/license/add-product?product=${p}&t=${encodeURIComponent(createLinkToken(key, "add-product", 24))}&lang=${lang}`
+      : "#";
 
   return (
     <main className="flex-1 px-6 py-24">
@@ -102,7 +116,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                   {t.addBody(productLabel(other))}
                 </p>
                 <a
-                  href={`/api/license/add-product?product=${other}&key=${enc}&lang=${lang}`}
+                  href={addProductHref(other)}
                   className="mt-4 inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
                 >
                   {t.addCta(productLabel(other))}
@@ -119,7 +133,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                   {t.manageBody}
                 </p>
                 <a
-                  href={`/api/license/portal?key=${enc}&lang=${lang}`}
+                  href={portalHref}
                   className="mt-4 inline-flex items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:text-white dark:hover:bg-slate-800"
                 >
                   {t.manageCta}

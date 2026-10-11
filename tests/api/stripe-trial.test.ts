@@ -32,6 +32,8 @@ beforeEach(() => {
   // Env the dryRun Resend paths still read via required().
   process.env.RESEND_FROM = "cc <onboarding@resend.dev>";
   process.env.RESEND_SUPPORT_TO = "support@itsbusiness.ch";
+  // Secret for the mail-link tokens (#37) — the manageable (Stripe) path mints them.
+  process.env.LICENSE_LINK_SECRET = "test-link-secret";
 });
 
 describe("stripe-subscription helpers (DRY_RUN)", () => {

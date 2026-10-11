@@ -21,6 +21,7 @@ import {
 import { isPlanId, planProducts } from "../../../plans";
 import { CURRENCIES, type BillingCycle, type Currency } from "../../../pricing";
 import { stripeTrialEnabled } from "../../../flags";
+import { createLinkToken } from "../../license/lib/link-token";
 
 // Shared signup core, used by the on-site /api/signup route and the CORS-enabled
 // public /api/public/v1/signup route (the CMS posts its own form here).
@@ -275,7 +276,7 @@ export async function performSignup(
     const product = provisioned[0].product;
     const keys = provisioned.map((p) => p.key);
     const portalUrl = provisioned[0].manageable
-      ? `${origin}/api/license/portal?key=${encodeURIComponent(keys[0])}`
+      ? `${origin}/api/license/portal?t=${encodeURIComponent(createLinkToken(keys[0], "portal"))}`
       : undefined;
     // Cross-sell the OTHER product as a self-serve add (#39): a Stripe-hosted
     // card-less TRIAL checkout bound to this customer, so the added product
@@ -285,7 +286,7 @@ export async function performSignup(
     const other: ProductId = product === "FW" ? "TMT" : "FW";
     const addProductUrl =
       provisioned[0].manageable && isOffered(other) && !isVetted(other)
-        ? `${origin}/api/license/add-product?product=${other}&key=${encodeURIComponent(keys[0])}`
+        ? `${origin}/api/license/add-product?product=${other}&t=${encodeURIComponent(createLinkToken(keys[0], "add-product"))}`
         : undefined;
     const addProductLabel = addProductUrl ? productLabel(other) : undefined;
     await sendWelcome(
@@ -561,7 +562,7 @@ async function sendProfessionalWelcomeMail(
   const tmt = provisioned.filter((p) => p.product === "TMT");
   const portalSource = provisioned.find((p) => p.manageable);
   const portalUrl = portalSource
-    ? `${origin}/api/license/portal?key=${encodeURIComponent(portalSource.key)}`
+    ? `${origin}/api/license/portal?t=${encodeURIComponent(createLinkToken(portalSource.key, "portal"))}`
     : undefined;
   try {
     await sendProfessionalWelcome(
