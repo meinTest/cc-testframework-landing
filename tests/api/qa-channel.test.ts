@@ -94,7 +94,7 @@ describe("GET /api/tmgmt/updates/qa/<file> (DRY_RUN)", () => {
   });
 
   test("redirects a binary asset (302)", async () => {
-    const res = await QA_UPDATE(...updReq("cc-tmgmt-qa-0.6.0-rc.1-win-x64.exe", "k"));
+    const res = await QA_UPDATE(...updReq("verify-test-management-qa-0.6.0-rc.1-win-x64.exe", "k"));
     assert.equal(res.status, 302);
     assert.ok(res.headers.get("location"));
   });

@@ -59,9 +59,9 @@ export async function getLatestAssets(
       { id: 1, name: "latest.yml", size: 512 },
       { id: 2, name: "latest-linux.yml", size: 512 },
       { id: 3, name: "latest-mac.yml", size: 512 },
-      { id: 4, name: "cc-tmgmt-0.5.0-win-x64.exe", size: 90_000_000 },
-      { id: 5, name: "cc-tmgmt-0.5.0-linux-x86_64.AppImage", size: 95_000_000 },
-      { id: 6, name: "cc-tmgmt-0.5.0-mac-arm64.dmg", size: 110_000_000 },
+      { id: 4, name: "verify-test-management-0.5.0-win-x64.exe", size: 90_000_000 },
+      { id: 5, name: "verify-test-management-0.5.0-linux-x86_64.AppImage", size: 95_000_000 },
+      { id: 6, name: "verify-test-management-0.5.0-mac-arm64.dmg", size: 110_000_000 },
     ];
   }
 
@@ -100,8 +100,8 @@ export async function getQaAssets(dryRun: boolean): Promise<ReleaseAsset[] | nul
   if (dryRun) {
     return [
       { id: 11, name: "qa.yml", size: 512 },
-      { id: 12, name: "cc-tmgmt-qa-0.6.0-rc.1-win-x64.exe", size: 92_000_000 },
-      { id: 13, name: "cc-tmgmt-qa-0.6.0-rc.1-win-x64.exe.blockmap", size: 90_000 },
+      { id: 12, name: "verify-test-management-qa-0.6.0-rc.1-win-x64.exe", size: 92_000_000 },
+      { id: 13, name: "verify-test-management-qa-0.6.0-rc.1-win-x64.exe.blockmap", size: 90_000 },
     ];
   }
   const now = Date.now();
@@ -143,20 +143,20 @@ export async function getFeedText(
       ? [
           "version: 0.6.0-rc.1",
           "files:",
-          "  - url: cc-tmgmt-qa-0.6.0-rc.1-win-x64.exe",
+          "  - url: verify-test-management-qa-0.6.0-rc.1-win-x64.exe",
           "    sha512: DRYRUN",
           "    size: 92000000",
-          "path: cc-tmgmt-qa-0.6.0-rc.1-win-x64.exe",
+          "path: verify-test-management-qa-0.6.0-rc.1-win-x64.exe",
           "releaseDate: '2026-09-22T00:00:00.000Z'",
           "",
         ].join("\n")
       : [
           "version: 0.5.0",
           "files:",
-          "  - url: cc-tmgmt-0.5.0-linux-x86_64.AppImage",
+          "  - url: verify-test-management-0.5.0-linux-x86_64.AppImage",
           "    sha512: DRYRUN",
           "    size: 95000000",
-          "path: cc-tmgmt-0.5.0-linux-x86_64.AppImage",
+          "path: verify-test-management-0.5.0-linux-x86_64.AppImage",
           "releaseDate: '2026-06-28T00:00:00.000Z'",
           "",
         ].join("\n");

@@ -9,7 +9,7 @@ cc-testframework#216 — is separate and not built here.)
 
 A `vX.Y.Z-rc.N` tag builds a separate **CC Test Management QA** app (own appId
 `ch.itsbusiness.cctmgmt.qa`, own data folder) and publishes a **GitHub
-pre-release** with `qa.yml`, the signed `cc-tmgmt-qa-<version>-win-x64.exe` and
+pre-release** with `qa.yml`, the signed `verify-test-management-qa-<version>-win-x64.exe` and
 its `.blockmap`. The QA app polls `<proxy>/api/tmgmt/updates/qa/qa.yml`; the
 customer app still polls `<proxy>/api/tmgmt/updates/latest.yml`.
 
