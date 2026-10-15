@@ -4,6 +4,7 @@ import {
   checkEntitlementCached,
   checkQaEntitlement,
   licenseKeyFromRequest,
+  normalizeChannel,
   ENTITLED_PRODUCTS,
 } from "./entitlement";
 import { rateLimit } from "./rate-limit";
@@ -43,8 +44,9 @@ export async function handleDownload(request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams;
   const os = params.get("os");
   // ?channel=qa serves the internal QA installer (same entitlement gate as the
-  // QA update feed). Anything else (incl. absent) → the customer channel, as today.
-  const channel = params.get("channel") === "qa" ? "qa" : "stable";
+  // QA update feed). Normalized case-insensitively/trimmed like the license
+  // metadata (#32). Anything else (incl. absent) → the customer channel, as today.
+  const channel = normalizeChannel(params.get("channel")) === "qa" ? "qa" : "stable";
 
   if (!os || !TARGET_OSES.includes(os as TargetOs)) {
     return new NextResponse("Query param 'os' must be one of: win, mac, linux", {

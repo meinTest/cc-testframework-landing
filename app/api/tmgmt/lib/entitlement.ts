@@ -122,7 +122,7 @@ export async function checkEntitlement(
   // Internal (channel:qa) licenses additionally see pre-release/rc artifacts in
   // the npm proxy (#30 follow-up / cc-testframework#216). Carried on the cached
   // verdict so gating adds no extra Keygen call.
-  const internal = asString(body?.data?.attributes?.metadata?.channel) === "qa";
+  const internal = isQaChannel(body);
   console.log(`${LOG_PREFIX} entitled license ${licenseId} as ${product} (key ${mask(licenseKey)})`);
   return { ok: true, licenseId, company, internal };
 }
@@ -145,8 +145,7 @@ export function qaChannelVerdict(body: KeygenValidation): QaEntitlement {
   if (product === null || !ENTITLED_PRODUCTS.includes(product)) {
     return { ok: false, status: 403, error: "qa-channel-not-entitled" };
   }
-  const channel = asString(body?.data?.attributes?.metadata?.channel);
-  if (channel !== "qa") return { ok: false, status: 403, error: "qa-channel-not-entitled" };
+  if (!isQaChannel(body)) return { ok: false, status: 403, error: "qa-channel-not-entitled" };
   return { ok: true, licenseId: body?.data?.id ?? "" };
 }
 
@@ -570,6 +569,19 @@ export interface KeygenValidation {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+/** Normalize a free-text channel value the way the app's `readFlavor` does. */
+export function normalizeChannel(value: unknown): string {
+  return asString(value).trim().toLowerCase();
+}
+
+// A Keygen license opted into the internal QA channel. The metadata is entered
+// by hand, so we compare case-insensitively and trimmed (`QA`, ` Qa ` all pass)
+// — but only an exact `qa` after normalizing: anything else (missing, empty,
+// `prod`, `qa-test`) is NOT QA and must stay gated. #32.
+function isQaChannel(body: KeygenValidation): boolean {
+  return normalizeChannel(body?.data?.attributes?.metadata?.channel) === "qa";
 }
 
 function mask(key: string): string {

@@ -34,6 +34,22 @@ describe("qaChannelVerdict", () => {
     assert.equal((v as { error: string }).error, "qa-channel-not-entitled");
   });
 
+  // #32 — channel is compared case-insensitively and trimmed (hand-entered metadata).
+  for (const channel of ["QA", "Qa", " qa ", " Qa "]) {
+    test(`channel ${JSON.stringify(channel)} → ok (normalized)`, () => {
+      const v = qaChannelVerdict(mockBody({ product: "cc-tmgmt", channel }));
+      assert.deepEqual(v, { ok: true, licenseId: "lic1" });
+    });
+  }
+
+  // ...but the direction never flips: anything that is not `qa` after normalizing stays 403.
+  for (const channel of ["", "   ", "prod", "qa-test", "qaa"]) {
+    test(`channel ${JSON.stringify(channel)} → 403 (not QA)`, () => {
+      const v = qaChannelVerdict(mockBody({ product: "cc-tmgmt", channel }));
+      assert.deepEqual(v, { ok: false, status: 403, error: "qa-channel-not-entitled" });
+    });
+  }
+
   test("not entitled (unresolvable product) → 403", () => {
     const v = qaChannelVerdict(mockBody({ channel: "qa" })); // no product
     assert.deepEqual(v, { ok: false, status: 403, error: "qa-channel-not-entitled" });
@@ -115,6 +131,12 @@ describe("GET /api/tmgmt/download?channel=qa (DRY_RUN)", () => {
 
   test("channel=qa → 302 to the QA installer", async () => {
     const res = await DOWNLOAD(dlReq("?os=win&channel=qa", "k"));
+    assert.equal(res.status, 302);
+    assert.ok(res.headers.get("location"));
+  });
+
+  test("channel=QA (normalized, #32) → 302 to the QA installer", async () => {
+    const res = await DOWNLOAD(dlReq("?os=win&channel=QA", "k"));
     assert.equal(res.status, 302);
     assert.ok(res.headers.get("location"));
   });
