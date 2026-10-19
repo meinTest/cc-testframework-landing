@@ -138,7 +138,7 @@ export async function sendWelcomeEmail(
     ${crossSell.html}
     <hr>
     <p>Questions? Reply to this email or reach us at
-       <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
+       <a href="mailto:sales@itsbusiness.ch">sales@itsbusiness.ch</a>.</p>
   `;
 
   const text = [
@@ -160,7 +160,7 @@ export async function sendWelcomeEmail(
     ...billing.text,
     ...crossSell.text,
     ``,
-    `Questions? support@itsbusiness.ch`,
+    `Questions? sales@itsbusiness.ch`,
   ].join("\n");
 
   const result = await resend.emails.send({
@@ -368,7 +368,7 @@ export async function sendOnboardInvite(
        only be used once.</p>
     <hr>
     <p>Questions? Reply to this email or reach us at
-       <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
+       <a href="mailto:sales@itsbusiness.ch">sales@itsbusiness.ch</a>.</p>
   `;
 
   const text = [
@@ -383,7 +383,7 @@ export async function sendOnboardInvite(
     ``,
     `This link is valid until ${expiresOn} and can only be used once.`,
     ``,
-    `Questions? support@itsbusiness.ch`,
+    `Questions? sales@itsbusiness.ch`,
   ].join("\n");
 
   const result = await resend.emails.send({
@@ -487,7 +487,7 @@ export async function sendTmgmtWelcome(
     ${crossSell.html}
     <hr>
     <p>Questions? Reply to this email or reach us at
-       <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
+       <a href="mailto:sales@itsbusiness.ch">sales@itsbusiness.ch</a>.</p>
   `;
 
   const text = [
@@ -510,7 +510,7 @@ export async function sendTmgmtWelcome(
     ...billing.text,
     ...crossSell.text,
     ``,
-    `Questions? support@itsbusiness.ch`,
+    `Questions? sales@itsbusiness.ch`,
   ].join("\n");
 
   const result = await resend.emails.send({
@@ -638,7 +638,7 @@ export async function sendProfessionalWelcome(
     ${billing.html}
     <hr>
     <p>Questions? Reply to this email or reach us at
-       <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
+       <a href="mailto:sales@itsbusiness.ch">sales@itsbusiness.ch</a>.</p>
   `;
 
   const text = [
@@ -665,7 +665,7 @@ export async function sendProfessionalWelcome(
     `Keep these keys safe — tied to your license; if it expires or is revoked, installs/updates and the app stop.`,
     ...billing.text,
     ``,
-    `Questions? support@itsbusiness.ch`,
+    `Questions? sales@itsbusiness.ch`,
   ].join("\n");
 
   const attachments = [
@@ -741,7 +741,7 @@ export async function sendSubscriptionKeys(
     <p>Your subscription renews on <strong>${renewsOn}</strong>; the keys stay valid as long as the subscription is active.</p>
     <hr>
     <p>Questions? Reach us at
-       <a href="mailto:support@itsbusiness.ch">support@itsbusiness.ch</a>.</p>
+       <a href="mailto:sales@itsbusiness.ch">sales@itsbusiness.ch</a>.</p>
   `;
   const textSections = input.groups
     .flatMap((g) => [`${g.productName}:`, rowsFor(g.keys), ``]);
@@ -753,7 +753,7 @@ export async function sendSubscriptionKeys(
     ...textSections,
     `Renews on ${renewsOn}; keys stay valid while the subscription is active.`,
     ``,
-    `Questions? support@itsbusiness.ch`,
+    `Questions? sales@itsbusiness.ch`,
   ].join("\n");
 
   const result = await resend.emails.send({ from, to: input.toEmail, subject: title, html, text });
