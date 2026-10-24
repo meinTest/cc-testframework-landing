@@ -1,8 +1,13 @@
 import { createAppAuth } from "@octokit/auth-app";
 
-// License-brokered proxy for the private @meintest/* npm packages on GitHub
-// Packages. The customer authenticates with their Keygen license (Bearer); the
-// GitHub App service token stays server-side and never reaches the client.
+// License-brokered proxy for the private @meintest/* and @itsbusinessag/* npm
+// packages on GitHub Packages. During the org move both scopes are served in
+// parallel — @meintest against the meinTest org, @itsbusinessag against the
+// itsbusinessAG org — so existing customer projects keep installing while new
+// ones use the new scope; there is no shutdown date for @meintest/* (#57). The
+// customer authenticates with their Keygen license (Bearer); the service token
+// stays server-side and never reaches the client, and must be able to read
+// packages in BOTH orgs (a classic PAT with read:packages visible in both).
 
 const GH_NPM = "https://npm.pkg.github.com";
 const PACKUMENT_TTL_MS = 5 * 60 * 1000;
@@ -25,6 +30,37 @@ interface Dist {
 interface RawPackument {
   versions?: Record<string, { dist?: Dist } & Record<string, unknown>>;
   [k: string]: unknown;
+}
+
+// Both scopes served during the org move. Anything outside them is rejected so
+// the proxy never becomes an open registry mirror (#1, #57).
+export const NPM_SCOPES = ["@meintest", "@itsbusinessag"] as const;
+
+// @<scope>/<pkg>/-/<file> — GitHub Packages names the tarball with a bare SHA
+// (no .tgz extension), so match anything after `/-/`.
+const TARBALL_RE = /^(@meintest|@itsbusinessag)\/([^/]+)\/-\/(.+)$/;
+// @<scope>/<pkg>
+const PACKUMENT_RE = /^(@meintest|@itsbusinessag)\/([^/]+)$/;
+
+export type NpmSpec =
+  | { kind: "tarball"; scope: string; pkg: string; filename: string }
+  | { kind: "packument"; scope: string; pkg: string }
+  | { kind: "not-found" } // an allowed scope but an unrecognized shape → 404
+  | { kind: "reject" }; //  any other scope → 403 (never an open mirror)
+
+/**
+ * Classify a raw npm spec (`@scope/pkg` or `@scope/pkg/-/file`). An allowed
+ * scope with an unknown shape is `not-found` (→404); any other scope is
+ * `reject` (→403). The matched scope is carried through so the upstream fetch
+ * and the cache key stay per-scope (#57).
+ */
+export function parseNpmSpec(spec: string): NpmSpec {
+  const tar = TARBALL_RE.exec(spec);
+  if (tar) return { kind: "tarball", scope: tar[1], pkg: tar[2], filename: tar[3] };
+  const pack = PACKUMENT_RE.exec(spec);
+  if (pack) return { kind: "packument", scope: pack[1], pkg: pack[2] };
+  if (NPM_SCOPES.some((s) => spec.startsWith(`${s}/`))) return { kind: "not-found" };
+  return { kind: "reject" };
 }
 
 let tokenCache: { at: number; token: string } | null = null;
@@ -56,20 +92,26 @@ async function installationToken(): Promise<string> {
   return token;
 }
 
-async function fetchRawPackument(pkg: string): Promise<RawPackument> {
+async function fetchRawPackument(scope: string, pkg: string): Promise<RawPackument> {
   const now = Date.now();
-  const hit = packumentCache.get(pkg);
+  // Keyed per scope: @meintest/cc-testframework and @itsbusinessag/cc-testframework
+  // are different packages in different orgs and must never share a cache slot (#57).
+  const cacheKey = `${scope}/${pkg}`;
+  const hit = packumentCache.get(cacheKey);
   if (hit && now - hit.at < PACKUMENT_TTL_MS) return hit.data;
 
   const token = await packagesAuthToken();
-  const res = await fetch(`${GH_NPM}/@meintest%2f${encodeURIComponent(pkg)}`, {
+  // GitHub Packages resolves the scope against the matching org (@meintest →
+  // meinTest, @itsbusinessag → itsbusinessAG), so the requested scope is carried
+  // through verbatim rather than hardcoded.
+  const res = await fetch(`${GH_NPM}/${scope}%2f${encodeURIComponent(pkg)}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
   });
   if (!res.ok) {
     throw new NpmProxyError(res.status === 404 ? 404 : 502, `packument ${res.status}`);
   }
   const data = (await res.json()) as RawPackument;
-  packumentCache.set(pkg, { at: now, data });
+  packumentCache.set(cacheKey, { at: now, data });
   return data;
 }
 
@@ -81,11 +123,12 @@ async function fetchRawPackument(pkg: string): Promise<RawPackument> {
  * (channel:qa) licenses get the full packument.
  */
 export async function getProxiedPackument(
+  scope: string,
   pkg: string,
   proxyBase: string,
   includePrereleases: boolean,
 ): Promise<unknown> {
-  const raw = await fetchRawPackument(pkg);
+  const raw = await fetchRawPackument(scope, pkg);
   const out = structuredClone(raw);
   if (!includePrereleases) stripPrereleases(out);
   for (const version of Object.values(out.versions ?? {})) {
@@ -93,7 +136,7 @@ export async function getProxiedPackument(
     if (dist?.tarball) {
       const filename = tarballFilename(dist.tarball);
       // integrity/shasum are left untouched so npm's verification still holds.
-      dist.tarball = `${proxyBase}/@meintest/${pkg}/-/${filename}`;
+      dist.tarball = `${proxyBase}/${scope}/${pkg}/-/${filename}`;
     }
   }
   return out;
@@ -111,11 +154,12 @@ export type TarballResolution =
  * build even by guessing its URL; a genuinely unknown filename is `not-found`.
  */
 export async function resolveOriginalTarball(
+  scope: string,
   pkg: string,
   filename: string,
   includePrereleases: boolean,
 ): Promise<TarballResolution> {
-  const raw = await fetchRawPackument(pkg);
+  const raw = await fetchRawPackument(scope, pkg);
   return matchTarball(raw.versions, filename, includePrereleases);
 }
 

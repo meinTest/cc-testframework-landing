@@ -101,14 +101,14 @@ export async function sendWelcomeEmail(
     ? `Your trial is active until <strong>${new Date(input.licenseExpiry).toLocaleDateString("en-GB")}</strong>.`
     : `Your trial is now active.`;
 
-  // License-brokered npm registry: the customer installs @meintest/cc-testframework
+  // License-brokered npm registry: the customer installs @itsbusinessag/cc-testframework
   // with only their license key — no GitHub account. The registry lives under
   // /api/tmgmt/npm and authenticates the same CC_LICENSE_KEY as the runtime.
   const origin = input.origin.replace(/\/$/, "");
   const registryPath = "/api/tmgmt/npm/";
   const registryUrl = `${origin}${registryPath}`;
   const authRef = `${origin.replace(/^https?:/, "")}${registryPath}`; // //host/api/tmgmt/npm/
-  const npmrc = `@meintest:registry=${registryUrl}\n${authRef}:_authToken=${input.licenseKey}`;
+  const npmrc = `@itsbusinessag:registry=${registryUrl}\n${authRef}:_authToken=${input.licenseKey}`;
 
   const billing = billingBlock(input.portalUrl);
   const crossSell = crossSellBlock(input.addProductUrl, input.addProductLabel);
@@ -128,7 +128,7 @@ export async function sendWelcomeEmail(
     <p>Add this to your project's <code>.npmrc</code>:</p>
     <pre>${escape(npmrc)}</pre>
     <p>then install the framework as usual:</p>
-    <pre>npm install @meintest/cc-testframework</pre>
+    <pre>npm install @itsbusinessag/cc-testframework</pre>
     <h2>3. Read the quickstart</h2>
     <p>
       <a href="${input.quickstartUrlEn}">English</a> &nbsp;|&nbsp;
@@ -153,7 +153,7 @@ export async function sendWelcomeEmail(
     `   Keep this key safe — it is tied to your license; if it expires or is revoked, installs and updates will stop.`,
     `2. Add this to your project's .npmrc:`,
     ...npmrc.split("\n").map((l) => `   ${l}`),
-    `   then: npm install @meintest/cc-testframework`,
+    `   then: npm install @itsbusinessag/cc-testframework`,
     `3. Read the quickstart:`,
     `   English: ${input.quickstartUrlEn}`,
     `   Deutsch: ${input.quickstartUrlDe}`,
@@ -597,7 +597,7 @@ export async function sendProfessionalWelcome(
   const registryPath = "/api/tmgmt/npm/";
   const registryUrl = `${origin}${registryPath}`;
   const authRef = `${origin.replace(/^https?:/, "")}${registryPath}`;
-  const npmrc = `@meintest:registry=${registryUrl}\n${authRef}:_authToken=${input.fwKey}`;
+  const npmrc = `@itsbusinessag:registry=${registryUrl}\n${authRef}:_authToken=${input.fwKey}`;
   // Download link carries a short-lived opaque token, not the raw key (#37).
   const dlToken = createLinkToken(input.tmtKeys[0] ?? "", "download");
   const downloadUrl = (os: "win" | "mac" | "linux") =>
@@ -620,7 +620,7 @@ export async function sendProfessionalWelcome(
     <pre>CC_LICENSE_KEY=${escape(input.fwKey)}</pre>
     <p>Point npm at the license-gated registry (project <code>.npmrc</code>):</p>
     <pre>${escape(npmrc)}</pre>
-    <pre>npm install @meintest/cc-testframework</pre>
+    <pre>npm install @itsbusinessag/cc-testframework</pre>
     <p>Quickstart: <a href="${input.quickstartUrlEn}">English</a> &nbsp;|&nbsp;
        <a href="${input.quickstartUrlDe}">Deutsch</a></p>
 
@@ -653,7 +653,7 @@ export async function sendProfessionalWelcome(
     `   CC_LICENSE_KEY=${input.fwKey}`,
     `.npmrc:`,
     ...npmrc.split("\n").map((l) => `   ${l}`),
-    `   then: npm install @meintest/cc-testframework`,
+    `   then: npm install @itsbusinessag/cc-testframework`,
     `Quickstart EN: ${input.quickstartUrlEn}`,
     `Quickstart DE: ${input.quickstartUrlDe}`,
     ``,

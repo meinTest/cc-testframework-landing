@@ -19,6 +19,7 @@ import {
   getProxiedPackument,
   resolveOriginalTarball,
   fetchTarball,
+  parseNpmSpec,
   NpmProxyError,
 } from "./npm-registry";
 
@@ -187,13 +188,10 @@ export async function handleQaUpdateFile(
   }
 }
 
-// --- License-brokered npm registry (@meintest/*) ----------------------------
-
-// @meintest/<pkg>/-/<file> — GitHub Packages names the tarball with a bare SHA
-// (no .tgz extension), so match anything after `/-/`.
-const TARBALL_RE = /^@meintest\/([^/]+)\/-\/(.+)$/;
-// @meintest/<pkg>
-const PACKUMENT_RE = /^@meintest\/([^/]+)$/;
+// --- License-brokered npm registry (@meintest/* + @itsbusinessag/*) ---------
+//
+// Both scopes are served in parallel during the org move (#57); spec parsing
+// and the scope allowlist live in npm-registry.ts (parseNpmSpec / NPM_SCOPES).
 
 /**
  * @param mountPrefix the route's mount path incl. trailing slash, e.g.
@@ -207,7 +205,7 @@ export async function handleNpm(
 ): Promise<Response> {
   const dryRun = process.env.DRY_RUN === "true";
 
-  // The @meintest/cc-testframework package is served to both a standalone
+  // The cc-testframework package is served to both a standalone
   // framework license and a cc-tmgmt license (which depends on the framework).
   // Same product set drives /license/status "entitled" and feedback (Issues #8/#10).
   const entitlement = await checkEntitlementCached(
@@ -241,16 +239,20 @@ export async function handleNpm(
   const at = pathname.indexOf(mountPrefix);
   const spec = safeDecode(at >= 0 ? pathname.slice(at + mountPrefix.length) : "");
 
-  // Never act as an open registry mirror.
-  if (!spec.startsWith("@meintest/")) {
-    return npmError(403, "Only @meintest/* packages are served");
+  // Never act as an open registry mirror: only the two migration scopes pass.
+  const parsed = parseNpmSpec(spec);
+  if (parsed.kind === "reject") {
+    return npmError(403, "Only @meintest/* and @itsbusinessag/* packages are served");
   }
 
   try {
-    const tar = TARBALL_RE.exec(spec);
-    if (tar) {
-      const [, pkg, filename] = tar;
-      const resolved = await resolveOriginalTarball(pkg, filename, includePrereleases);
+    if (parsed.kind === "tarball") {
+      const resolved = await resolveOriginalTarball(
+        parsed.scope,
+        parsed.pkg,
+        parsed.filename,
+        includePrereleases,
+      );
       // A pre-release tarball for a non-internal license → 403 (not 404), so a
       // guessed rc URL is rejected the same way as the QA update feed (#31).
       if (resolved.kind === "forbidden") return npmError(403, "qa-channel-not-entitled");
@@ -270,12 +272,16 @@ export async function handleNpm(
       return new Response(upstream.body, { status: 200, headers });
     }
 
-    const pack = PACKUMENT_RE.exec(spec);
-    if (pack) {
+    if (parsed.kind === "packument") {
       // Point the packument's tarball URLs back at the same mount the client
       // called (trailing slash trimmed).
       const proxyBase = `${originFromRequest(request)}${mountPrefix.replace(/\/$/, "")}`;
-      const packument = await getProxiedPackument(pack[1], proxyBase, includePrereleases);
+      const packument = await getProxiedPackument(
+        parsed.scope,
+        parsed.pkg,
+        proxyBase,
+        includePrereleases,
+      );
       return NextResponse.json(packument, {
         headers: { "Cache-Control": "no-store" },
       });
